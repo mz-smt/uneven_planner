@@ -1,0 +1,53 @@
+<?xml version="1.0" ?>
+<sdf version="1.7">
+  <world name="flat_and_slope20deg">
+    <!-- 1) 光照 -->
+    <light name="sun" type="directional">
+      <cast_shadows>1</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- 2) 重力设置 -->
+    <gravity>0 0 -9.8</gravity>
+
+    <!-- 3) 平地模型 -->
+    <include>
+      <uri>model://ground_plane</uri>
+    </include>
+
+    <!-- 4) 倾斜坡面模型 -->
+    <model name="slope20deg">
+      <static>1</static>
+      <link name="link">
+        <!--
+          旋转 20°: 绕 Y 轴 0.349066 rad
+          厚度 0.1m，中点在 z=0，顶面在 z=+0.05m
+        -->
+        <pose>0 0 0.05 0 0.349066 0</pose>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>40 40 0.1</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>40 40 0.1</size>
+            </box>
+          </geometry>
+          <material>
+            <script>
+              <uri>file://media/materials/scripts/gazebo.material</uri>
+              <name>Gazebo/Grey</name>
+            </script>
+          </material>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>
