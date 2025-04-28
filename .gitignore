@@ -12,3 +12,4 @@ map_mountain.dae
 ref/
 *.bag
 *.map
+cmake-build-debug/
