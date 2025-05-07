@@ -36,6 +36,7 @@ namespace uneven_planner
                              msg->pose.pose.orientation.x, \
                              msg->pose.pose.orientation.y, \
                              msg->pose.pose.orientation.z  );
+        quaternion = q;
         Eigen::Matrix3d R(q);
         odom_pos(2) = UnevenMap::calYawFromR(R);
     }
@@ -75,14 +76,14 @@ namespace uneven_planner
                 dyaw = init_path[i+1].z() - init_path[i].z();
             }
         }
-
+#if PLAN_TYPE == ORIGIN_OPTIMIZE
         // init solution
         Eigen::Matrix<double, 2, 3> init_xy, end_xy;
         Eigen::Vector3d init_yaw, end_yaw;
         Eigen::MatrixXd inner_xy;
         Eigen::VectorXd inner_yaw;
         double total_time;
-    
+
         init_xy << init_path[0].x(), 0.0, 0.0, \
                    init_path[0].y(), 0.0, 0.0;
         end_xy << init_path.back().x(), 0.0, 0.0, \
@@ -92,7 +93,7 @@ namespace uneven_planner
 
         init_xy.col(1) << init_sig_vel * cos(init_yaw(0)), init_sig_vel * sin(init_yaw(0));
         end_xy.col(1) << init_sig_vel * cos(end_yaw(0)), init_sig_vel * sin(end_yaw(0));
-        
+
         double temp_len_yaw = 0.0;
         double temp_len_pos = 0.0;
         double total_len = 0.0;
@@ -130,10 +131,10 @@ namespace uneven_planner
         {
             inner_yaw(i) = inner_yaw_node[i];
         }
-    
+
         traj_opt.optimizeSE2Traj(init_xy, end_xy, inner_xy, \
                         init_yaw, end_yaw, inner_yaw, total_time);
-        
+
         // visualization
         SE2Trajectory back_end_traj = traj_opt.getTraj();
         traj_opt.visSE2Traj(back_end_traj);
@@ -183,6 +184,11 @@ namespace uneven_planner
         anglept.x = angle[0];
         traj_msg.angle_pts.push_back(anglept);
         traj_pub.publish(traj_msg);
+#elif PLAN_TYPE == VISUAL_COST
+        traj_opt.setOdom(odom_pos, quaternion);
+        traj_opt.verifyWorkCost(init_path);
+#elif PLAN_TYPE == PPSO_SMOOTH
+#endif
         in_plan = false;
 
         return;

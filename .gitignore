@@ -13,3 +13,4 @@ ref/
 *.bag
 *.map
 cmake-build-debug/
+.idea/

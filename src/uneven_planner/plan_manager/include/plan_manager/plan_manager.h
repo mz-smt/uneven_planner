@@ -14,6 +14,11 @@
 #include "back_end/alm_traj_opt.h"
 #include "mpc_controller/SE2Traj.h"
 
+#define PLAN_TYPE VISUAL_COST
+#define ORIGIN_OPTIMIZE 0
+#define VISUAL_COST 1
+#define PSO_SMOOTH 2
+
 namespace uneven_planner
 {
     class PlanManager
@@ -26,6 +31,7 @@ namespace uneven_planner
             double yaw_piece_times;
             double init_sig_vel;
             Eigen::Vector3d odom_pos;
+            Eigen::Quaterniond quaternion;
             string bk_dir;
 
             UnevenMap::Ptr uneven_map;

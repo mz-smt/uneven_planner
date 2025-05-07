@@ -11,6 +11,10 @@
 #include "utils/se2traj.hpp"
 #include "utils/lbfgs.hpp"
 
+#define VISUAL_TYPE A_STAR_PATH
+#define A_STAR_PATH 0
+#define SAMPLE_PATH 1
+
 namespace uneven_planner
 {
     constexpr double delta_sigl = 0.01;
@@ -81,9 +85,17 @@ namespace uneven_planner
             ros::Publisher se2_pub;
             ros::Publisher se3_pub;
             ros::Publisher debug_pub;
+            ros::Publisher marker_arr_pub;
             ros::Subscriber odom_sub;
             ros::Subscriber wps_sub;
             Eigen::Vector3d odom_pos;
+            Eigen::Quaterniond quaternion;
+            const float mass = 20.0f;
+            const float g = 9.8f;
+            const float weight_fraction = 0.7f;
+            const float cg_height = 0.2f;
+            const float wheel_dist = 0.45f;
+            const float track_width = 0.48f;
 
         public:
             void init(ros::NodeHandle& nh);
@@ -96,6 +108,8 @@ namespace uneven_planner
                                 const Eigen::VectorXd &endYaw     , \
                                 const Eigen::VectorXd &innerPtsYaw, \
                                 const double & totalTime            );
+            void verifyWorkCost(std::vector<Eigen::Vector3d>& path);
+            void setOdom(const Eigen::Vector3d& odom_pose, const Eigen::Quaterniond& quaternion_input);
             void initScaling(Eigen::VectorXd x0);
             void calConstrainCostGrad(double& cost, Eigen::MatrixXd& gdCxy, Eigen::VectorXd &gdTxy, \
                                       Eigen::MatrixXd& gdCyaw, Eigen::VectorXd &gdTyaw);
@@ -103,6 +117,11 @@ namespace uneven_planner
             void visSE2Traj(const SE2Trajectory& traj);
             void visSE3Traj(const SE2Trajectory& traj);
 
+            void computeSlopeAngles(const Eigen::Quaterniond& q, double yaw, double& theta_slope, double& psi_s);
+            void computePointAttitude(double theta_slope, double psi_s, double psi_i, double& pitch, double& roll);
+            void computeForcesImproved(double pitch, double roll, double& N_L, double& N_R);
+            std::vector<Eigen::Vector3d> samplePoints(const Eigen::Vector3d& center, const float& r,
+                                                      const float& step_deg, std::vector<bool>& dir_vec);
             inline void setFrontend(const KinoAstar::Ptr& front_end);
             inline void setEnvironment(const UnevenMap::Ptr& env);
             inline void updateDualVars();

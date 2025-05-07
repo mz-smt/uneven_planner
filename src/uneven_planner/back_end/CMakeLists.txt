@@ -31,6 +31,7 @@ include_directories(
 
 add_library(back_end 
     src/alm_traj_opt.cpp
+    src/pso_smoother.cpp
 )
 
 target_link_libraries(back_end

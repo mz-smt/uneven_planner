@@ -1,4 +1,5 @@
 #include "back_end/alm_traj_opt.h"
+#include "utils/math_utils.hpp"
 
 namespace uneven_planner
 {
@@ -30,6 +31,7 @@ namespace uneven_planner
 
         se2_pub = nh.advertise<nav_msgs::Path>("/alm/se2_path", 1);
         se3_pub = nh.advertise<nav_msgs::Path>("/alm/se3_path", 1);
+        marker_arr_pub = nh.advertise<visualization_msgs::MarkerArray>("/alm/path_cost_vec", 1);
         if (in_test)
         {
             wps_sub = nh.subscribe<geometry_msgs::PoseStamped>("/move_base_simple/goal", 1, &ALMTrajOpt::rcvWpsCallBack, this);
@@ -52,6 +54,7 @@ namespace uneven_planner
                              msg->pose.pose.orientation.x, \
                              msg->pose.pose.orientation.y, \
                              msg->pose.pose.orientation.z  );
+        quaternion = q;
         Eigen::Matrix3d R(q);
         odom_pos(2) = UnevenMap::calYawFromR(R);
     }
@@ -275,6 +278,193 @@ namespace uneven_planner
         in_opt = false;
         
         return ret_code;
+    }
+
+    void ALMTrajOpt::setOdom(const Eigen::Vector3d &odom_pose, const Eigen::Quaterniond &quaternion_input) {
+        odom_pos = odom_pose;
+        quaternion = quaternion_input;
+        auto rpy = quaternion_input.toRotationMatrix().eulerAngles(2, 1, 0);
+        std::cout << "debug current pose: " << odom_pos[0] << "," << odom_pos[1] << " attitude: "
+            << rpy[2] / M_PI * 180 << "," << rpy[1] / M_PI * 180 << "," << rpy[0] / M_PI * 180 << std::endl;
+    }
+
+    void ALMTrajOpt::verifyWorkCost(std::vector<Eigen::Vector3d> &path) {
+        std::vector<bool> dir_vec;
+        dir_vec.resize(path.size(), true);
+#if VISUAL_TYPE == SAMPLE_PATH
+        path = samplePoints(odom_pos, 0.5, 30, dir_vec);
+#endif
+        for (auto& point : path) {
+            point[2] = wrapToPi(point[2]);
+        }
+        double theta_slope;
+        double psi_s;
+        computeSlopeAngles(quaternion, odom_pos[2], theta_slope, psi_s);
+        std::cout << "debug verify slope angles: " << theta_slope / M_PI * 180 << " and psi_s: " << psi_s  / M_PI * 180
+            << " yaw theta: " << odom_pos[2] / M_PI * 180 << std::endl;
+        double pitch, roll;
+        std::vector<float> cost_vec;
+        cost_vec.resize(path.size(), 0.0f);
+#if VISUAL_TYPE == A_STAR_PATH
+        for (size_t i = 0; i < path.size() - 1; i++) {
+            auto cur_pose = path.at(i);
+            auto next_pose = path.at(i + 1);
+#elif VISUAL_TYPE == SAMPLE_PATH
+        for (size_t i = 0; i < path.size(); i++) {
+            auto cur_pose = odom_pos;
+            auto next_pose = path.at(i);
+#endif
+            auto delta_theta = wrapToPi(next_pose[2] - cur_pose[2]);
+            auto length = (next_pose - cur_pose).head(2).norm();
+            std::cout << "debug current: " << cur_pose[0] << " " << cur_pose[1] << " " << cur_pose[2] / M_PI * 180
+                << " to next point: " << next_pose[0] << " " << next_pose[1] << " " << next_pose[2] / M_PI * 180
+                << " path dist: " << length << " theta diff: " << delta_theta << std::endl;
+            double psi_i = cur_pose[2];
+            computePointAttitude(theta_slope, psi_s, psi_i, pitch, roll);
+            double N_l, N_r;
+            computeForcesImproved(pitch, roll, N_l, N_r);
+            const double mu = 1.2f;
+            auto F_l = mu * N_l;
+            auto F_r = mu * N_r;
+            auto dir = dir_vec.at(i) ? 1 : -1;
+            auto d_r = dir * length + wheel_dist / 2 * delta_theta;
+            auto d_l = dir * length - wheel_dist / 2 * delta_theta;
+            if (length < 1e-6 && std::fabs(delta_theta) < 1e-6) {
+                cost_vec.at(i) = 0;
+                continue;
+            }
+            auto w_drive = F_l * std::fabs(d_l) + F_r * std::fabs(d_r);
+            auto a = tan(theta_slope) * cos(psi_s);
+            auto b = tan(theta_slope) * sin(psi_s);
+            auto delta_z = a * (next_pose.x() - cur_pose.x()) + b * (next_pose.y() - cur_pose.y())
+                    + 0.09 * (a * (cos(next_pose.z()) - cos(cur_pose.z())) + b * (sin(next_pose.z()) - sin(cur_pose.z())));
+            auto w_grav = mass * g * delta_z;
+            auto delta_w = w_drive - w_grav;
+            auto cost = 1 / delta_w;
+            cost_vec.at(i) = cost;
+            std::cout << "debug path index: " << i << " theta: " << psi_i / M_PI * 180 << " pitch: "
+                << pitch / M_PI * 180 << " roll: " << roll / M_PI * 180 << " and forces: " << N_l << "," << N_r
+                << " force: " << F_l << " " << F_r << " dist: " << d_l << " " << d_r << " work drive: " << w_drive
+                << " delta z: " << delta_z << " work grav: " << w_grav << " cost: " << cost << std::endl;
+        }
+
+        visualization_msgs::MarkerArray arr;
+        arr.markers.clear();
+
+        for (size_t i = 0; i < path.size(); i++) {
+            auto p = path.at(i);
+            auto height = cost_vec.at(i) * 20;
+            visualization_msgs::Marker m;
+            m.header.frame_id = "world";
+            m.header.stamp    = ros::Time::now();
+            m.ns              = "height_cylinders";
+            m.id              = i;
+            m.type            = visualization_msgs::Marker::CYLINDER;
+            m.action          = visualization_msgs::Marker::ADD;
+            m.scale.x         = 0.1;
+            m.scale.y         = 0.1;
+            m.scale.z         = height;
+            m.pose.position.x = p.x();
+            m.pose.position.y = p.y();
+            m.pose.position.z = height * 0.5;
+            m.pose.orientation.w = 1.0;
+            m.color.r = 1.0; m.color.g = 0.0; m.color.b = 0.0; m.color.a = 0.6;
+
+            arr.markers.push_back(m);
+        }
+
+        // 一次性发布全部
+        marker_arr_pub.publish(arr);
+    }
+
+    void ALMTrajOpt::computeSlopeAngles(const Eigen::Quaterniond &q, double yaw, double &theta_slope, double &psi_s) {
+        // 1. 构造机体->世界旋转矩阵（四元数转旋转矩阵）
+        Eigen::Matrix3d Rwb = q.toRotationMatrix();  // :contentReference[oaicite:4]{index=4}
+
+        // 2. 世界重力 [0,0,-g] 投影到机体坐标系
+        Eigen::Vector3d g_body = Rwb.transpose() * Eigen::Vector3d(0.0, 0.0, -g);  //
+
+        // 分量
+        double gx = g_body.x();
+        double gy = g_body.y();
+        double gz = g_body.z();
+
+        // 3. 计算坡度角
+        theta_slope = std::atan2(std::hypot(gx, gy), std::abs(gz));  //
+
+        // 4. 机体坐标系下坡面上升方向
+        double psi_body = std::atan2(-gy, -gx);  // :contentReference[oaicite:5]{index=5}
+
+        // 5. 规范化输入 yaw 到 (-π, π]
+        double yaw_n =
+                std::atan2(std::sin(yaw), std::cos(yaw));  // :contentReference[oaicite:6]{index=6}
+
+        // 6. 全局系下坡度方向角 = yaw_n + psi_body，再规范化
+        double raw = yaw_n + psi_body;
+        psi_s =
+                std::atan2(std::sin(raw), std::cos(raw));  // :contentReference[oaicite:7]{index=7}
+    }
+
+    void ALMTrajOpt::computePointAttitude(double theta_slope, double psi_s, double psi_i, double &pitch, double &roll) {
+        double delta_psi = psi_s - psi_i;  // 修正方向差顺序
+        delta_psi = std::atan2(std::sin(delta_psi), std::cos(delta_psi));
+        // 计算俯仰角
+        pitch = -theta_slope * std::cos(delta_psi);
+        // 计算横滚角
+        roll = theta_slope * std::sin(delta_psi);
+    }
+
+    void ALMTrajOpt::computeForcesImproved(double pitch, double roll, double& N_L, double& N_R) {
+        // 重力分解（车辆姿态）：
+        double g_x = g * sin(pitch);  // 纵向分量
+        double g_y = g * sin(roll);  // 横向分量
+        double g_z = g * cos(pitch) * cos(roll);  // 垂直分量
+
+        // 静态后轴法向力（后轮）：
+        double N0 = (mass * g_z * weight_fraction) / 2.0;
+
+        // 载荷转移：
+        // 纵向载荷转移（由俯仰角引起）
+        double deltaN_long =
+                - (mass * g * sin(pitch) * cg_height) / wheel_dist;
+        // 横向载荷转移（由横滚角引起）
+        double deltaN_roll =
+                (mass * g * sin(roll) * cg_height) / track_width;
+        // 侧向加速度引起的载荷转移
+        double deltaN_total = deltaN_roll;
+
+        // 最终左右轮法向力
+        N_L = N0 + deltaN_long - deltaN_total;
+        N_R = N0 + deltaN_long + deltaN_total;
+    }
+
+    std::vector<Eigen::Vector3d>
+    ALMTrajOpt::samplePoints(const Eigen::Vector3d &center, const float &r, const float &step_deg,
+                             std::vector<bool>& dir_vec) {
+        std::vector<Eigen::Vector3d> pts;
+        int N = int(360.0 / step_deg);
+        double dtheta = step_deg * M_PI / 180.0;  // 将度转为弧度 :contentReference[oaicite:0]{index=0}
+
+        dir_vec.resize(N, true);
+        for (int k = 0; k < N; ++k) {
+            double theta = k * dtheta;
+            // 计算平面坐标
+            double x = center.x() + r * std::cos(theta);
+            double y = center.y() + r * std::sin(theta);
+            // 1) 当前→采样点方向
+            double alpha1 = std::atan2(y - center.y(), x - center.x());  // :contentReference[oaicite:1]{index=1}
+            // 2) 反向
+            double alpha2 = wrapToPi(alpha1 + M_PI);
+            // 3) 归一化角度差
+            double d1 = std::abs(wrapToPi(alpha1 - center[2]));
+            double d2 = std::abs(wrapToPi(alpha2 - center[2]));
+            // 4) 选择偏差更小的角度
+            double psi = (d1 <= d2) ? alpha1 : alpha2;
+            // 保存 (x, y, psi)
+            pts.emplace_back(x, y, psi);
+            dir_vec.at(k) = d1 <= d2;
+        }
+        return pts;
     }
 
     static double innerCallback(void* ptrObj, const Eigen::VectorXd& x, Eigen::VectorXd& grad)
