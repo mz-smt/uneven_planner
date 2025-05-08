@@ -12,7 +12,10 @@ using namespace uneven_planner;
 SmoothTrackerParam PathCostCalculator::tracker_param_ = {};
 Eigen::Vector3f PathCostCalculator::start_point_ = {0, 0, 0};
 Eigen::Vector3f PathCostCalculator::end_point_ = {0, 0, 0};
+Eigen::Vector3f PathCostCalculator::cur_pose_ = {0, 0, 0};
 float PathCostCalculator::step_size_ = 0.1f;
+Eigen::Quaterniond PathCostCalculator::q_ = Eigen::Quaterniond::Identity();
+VehicleParams PathCostCalculator::vehicle_param_ = {};
 
 PSOSmoother::PSOSmoother() : speed_limit_(0.6, 0.5, 0.2) {}
 
@@ -21,23 +24,17 @@ void PSOSmoother::init(ros::NodeHandle &nh) {
     //callback to receive trigger to smooth, input path: 1.some trajectories
 }
 
-bool PSOSmoother::smooth(nav_msgs::Path& path, const nav_msgs::Odometry& pose) {
+void PSOSmoother::setOdom(const Eigen::Vector3d &odom_pose, const Eigen::Quaterniond &quaternion_input) {
+    cur_pose_ << odom_pose.x(), odom_pose.y(), odom_pose.z();
+    q_ = quaternion_input;
+}
+
+bool PSOSmoother::smooth(std::vector<Eigen::Vector3f>& path) {
     param_.max_vel_x = speed_limit_[0];
     param_.max_vel_theta = speed_limit_[1];
     param_.max_vel_x_backward = speed_limit_[2];
 
-    std::vector<Eigen::Vector3f> init_path;
-    for (auto pose : path.poses) {
-        Eigen::Vector3f point;
-        point[0] = pose.pose.position.x;
-        point[1] = pose.pose.position.y;
-        auto quat = pose.pose.orientation;
-        tf::Matrix3x3 mat(tf::Quaternion(quat.x, quat.y, quat.z, quat.w));
-        double yaw, pitch, roll;
-        mat.getEulerYPR(yaw, pitch, roll);
-        point[2] = yaw;
-        init_path.emplace_back(point);
-    }
+    std::vector<Eigen::Vector3f> init_path = path;
     if (init_path.size() < 2) {
         m_init_path_ = init_path;
         std::cout << "Smooth error for init path size=." << init_path.size() << std::endl;
@@ -49,7 +46,15 @@ bool PSOSmoother::smooth(nav_msgs::Path& path, const nav_msgs::Odometry& pose) {
 
     // init PathCostCalculator
     PathCostCalculator::setParam(param_);
-    PathCostCalculator::setBoundaryCondition(m_init_path_.front(), m_init_path_.back());
+    PathCostCalculator::setBoundaryCondition(m_init_path_.front(), m_init_path_.back(), cur_pose_, q_);
+    VehicleParams param{};
+    param.mass = 20.0f;
+    param.cgHeight = 0.25;
+    param.g = 9.81;
+    param.rearWeightFraction = 0.7;
+    param.trackWidth = 0.48;
+    param.wheelbase = 0.45;
+    PathCostCalculator::setVehicleParams(param);
     //
     // You can specify an InertiaWeightStrategy functor as
     // template parameter. There are ConstantWeight, LinearDecrease,
@@ -171,18 +176,7 @@ bool PSOSmoother::smooth(nav_msgs::Path& path, const nav_msgs::Odometry& pose) {
     }
     ROS_DEBUG("Optimal path:%s, value=%.2f, success %d.", path_info.c_str(), result.fval, is_success);
 
-    path.header.stamp = ros::Time::now();
-    path.header.frame_id = "world";
-    path.poses.clear();
-    for (auto point : result_path_) {
-        geometry_msgs::PoseStamped pose;
-        pose.header.stamp = ros::Time::now();
-        pose.header.frame_id = "world";
-        pose.pose.position.x = point[0];
-        pose.pose.position.y = point[1];
-        pose.pose.orientation = tf::createQuaternionMsgFromYaw(point[2]);
-        path.poses.emplace_back(pose);
-    }
+    path = result_path_;
 
     return is_success;
 }

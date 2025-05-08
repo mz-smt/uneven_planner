@@ -12,6 +12,7 @@
 #include "uneven_map/uneven_map.h"
 #include "front_end/kino_astar.h"
 #include "back_end/alm_traj_opt.h"
+#include "back_end/pso_smoother.hpp"
 #include "mpc_controller/SE2Traj.h"
 
 #define PLAN_TYPE VISUAL_COST
@@ -37,6 +38,7 @@ namespace uneven_planner
             UnevenMap::Ptr uneven_map;
             KinoAstar::Ptr kino_astar;
             ALMTrajOpt traj_opt;
+            PSOSmoother pso_smoother;
             SE2Trajectory opted_traj;
 
             ros::Publisher traj_pub;
