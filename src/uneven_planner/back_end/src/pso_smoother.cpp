@@ -21,6 +21,8 @@ PSOSmoother::PSOSmoother() : speed_limit_(0.6, 0.5, 0.2) {}
 
 void PSOSmoother::init(ros::NodeHandle &nh) {
     node_ = nh;
+    refactor_path_pub_ = node_.advertise<nav_msgs::Path>("/pso/refactor_path", 1);
+    result_path_pub_ = node_.advertise<nav_msgs::Path>("/pso/result_path", 1);
     //callback to receive trigger to smooth, input path: 1.some trajectories
 }
 
@@ -43,6 +45,19 @@ bool PSOSmoother::smooth(std::vector<Eigen::Vector3f>& path) {
 
     int points_num = 0;
     refactorPath(init_path, m_init_path_, points_num);
+    nav_msgs::Path refactor_path;
+    refactor_path.header.stamp = ros::Time::now();
+    refactor_path.header.frame_id = "world";
+    geometry_msgs::PoseStamped temp_pose;
+    temp_pose.header = refactor_path.header;
+    refactor_path.poses.clear();
+    for (const auto& point : m_init_path_) {
+        temp_pose.pose.position.x = point[0];
+        temp_pose.pose.position.y = point[1];
+        temp_pose.pose.orientation = tf::createQuaternionMsgFromYaw(point[2]);
+        refactor_path.poses.push_back(temp_pose);
+    }
+    refactor_path_pub_.publish(refactor_path);
 
     // init PathCostCalculator
     PathCostCalculator::setParam(param_);
@@ -113,6 +128,7 @@ bool PSOSmoother::smooth(std::vector<Eigen::Vector3f>& path) {
 
     m_optimal_path_.clear();
     m_optimal_path_.emplace_back(m_init_path_.front());
+    result_path_.clear();
     auto point_size = (int)result.xval.size() / 3;
     for (int i = 0; i < point_size; ++i) {
         m_optimal_path_.emplace_back(result.xval(3 * i), result.xval(3 * i + 1),
@@ -124,14 +140,16 @@ bool PSOSmoother::smooth(std::vector<Eigen::Vector3f>& path) {
         for (const auto& point : m_optimal_path_) {
             path_info += str_format("{%.2f,%.2f,%.2f} ", point[0], point[1], point[2]);
         }
-        ROS_DEBUG("Optimal path:%s.", path_info.c_str());
+        std::cout << "Optimal path:" << path_info << std::endl;
     }
 
     // construct optimal trajectory
     for (int i = 1; i < m_optimal_path_.size(); ++i) {
+        std::cout << "debug path index: " << i << " forward" << std::endl;
         auto forward_time = PathCostCalculator::calculateSplineTime(
                 m_optimal_path_[i - 1][0], m_optimal_path_[i - 1][1], m_optimal_path_[i - 1][2],
                 m_optimal_path_[i][0], m_optimal_path_[i][1], m_optimal_path_[i][2], false);
+        std::cout << "debug path index: " << i << " backward" << std::endl;
         auto back_time = PathCostCalculator::calculateSplineTime(
                 m_optimal_path_[i - 1][0], m_optimal_path_[i - 1][1], m_optimal_path_[i - 1][2],
                 m_optimal_path_[i][0], m_optimal_path_[i][1], m_optimal_path_[i][2], true);
@@ -174,10 +192,21 @@ bool PSOSmoother::smooth(std::vector<Eigen::Vector3f>& path) {
     for (const auto& point : m_optimal_path_) {
         path_info += str_format("{%.2f,%.2f,%.2f} ", point[0], point[1], point[2]);
     }
-    ROS_DEBUG("Optimal path:%s, value=%.2f, success %d.", path_info.c_str(), result.fval, is_success);
+    std::cout << "Optimal path:" << path_info << ", value=" << result.fval << ", success: " << is_success << std::endl;
 
     path = result_path_;
-
+    nav_msgs::Path result_path;
+    result_path.header.stamp = ros::Time::now();
+    result_path.header.frame_id = "world";
+    temp_pose.header = result_path.header;
+    result_path.poses.clear();
+    for (const auto& point : result_path_) {
+        temp_pose.pose.position.x = point[0];
+        temp_pose.pose.position.y = point[1];
+        temp_pose.pose.orientation = tf::createQuaternionMsgFromYaw(point[2]);
+        result_path.poses.push_back(temp_pose);
+    }
+    result_path_pub_.publish(result_path);
     return is_success;
 }
 
@@ -190,13 +219,13 @@ PSOSmoother::refactorPath(const std::vector<Eigen::Vector3f> &init_path, std::ve
             static_cast<int>((init_path.front().head(2) - init_path.back().head(2)).norm() / StepSize)
             + 1);
     points_num = std::min(MaxPointSize, points_num);
-    if (param_.verbose) ROS_DEBUG("Total path points size %d.", points_num);
     if (param_.verbose) {
+        std::cout << "Total path points size:" << points_num << std::endl;
         std::string init_path_info;
         for (const auto& point : init_path) {
             init_path_info += str_format("{%.2f,%.2f,%.2f},", point[0], point[1], point[2]);
         }
-        ROS_DEBUG("Init path: %s.", init_path_info.c_str());
+        std::cout << "Init path: " << init_path_info << std::endl;
     }
 
     // remove pure rotate point or too close point
@@ -215,7 +244,7 @@ PSOSmoother::refactorPath(const std::vector<Eigen::Vector3f> &init_path, std::ve
         for (const auto& point : refactor_path) {
             temp_path_info += str_format("{%.2f,%.2f,%.2f},", point[0], point[1], point[2]);
         }
-        ROS_DEBUG("Init path after remove too close points: %s.", temp_path_info.c_str());
+        std::cout << "Init path after remove too close points: " << temp_path_info << std::endl;
     }
 
     /// add point between max distance points
@@ -238,8 +267,7 @@ PSOSmoother::refactorPath(const std::vector<Eigen::Vector3f> &init_path, std::ve
                         / 2));
         refactor_path.insert(refactor_path.begin() + max_distance_index + 1, insert_point);
         if (param_.verbose)
-            ROS_DEBUG("Insert point(%.2f,%.2f,%.2f).", insert_point.x(), insert_point.y(),
-                  insert_point.z());
+            std::cout << "Insert point: " << insert_point.x() << " " << insert_point.y() << " " << insert_point.z() << std::endl;
     }
 
     /// remove min distance point
@@ -255,9 +283,8 @@ PSOSmoother::refactorPath(const std::vector<Eigen::Vector3f> &init_path, std::ve
             }
         }
         if (param_.verbose) {
-            ROS_DEBUG("Erase index %d, erase point(%.2f,%.2f,%.2f).", min_distance_index,
-                  refactor_path[min_distance_index][0], refactor_path[min_distance_index][1],
-                  refactor_path[min_distance_index][2]);
+            std::cout << "Erase index " << min_distance_index << " erase point " << refactor_path[min_distance_index][0]
+                << " " << refactor_path[min_distance_index][1] << " " << refactor_path[min_distance_index][2] << std::endl;
         }
         refactor_path.erase(refactor_path.begin() + min_distance_index);
         //            if(verbose_) {
@@ -275,6 +302,6 @@ PSOSmoother::refactorPath(const std::vector<Eigen::Vector3f> &init_path, std::ve
         for (const auto& point : refactor_path) {
             refactor_path_info += str_format("{%.2f,%.2f,%.2f},", point[0], point[1], point[2]);
         }
-        ROS_DEBUG("Refactor path: %s.", refactor_path_info.c_str());
+        std::cout << "Refactor path: " << refactor_path_info << std::endl;
     }
 }

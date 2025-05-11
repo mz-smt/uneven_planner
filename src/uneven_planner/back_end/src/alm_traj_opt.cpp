@@ -1,5 +1,5 @@
 #include "back_end/alm_traj_opt.h"
-#include "utils/math_utils.hpp"
+#include "utils/math_util.hpp"
 
 namespace uneven_planner
 {

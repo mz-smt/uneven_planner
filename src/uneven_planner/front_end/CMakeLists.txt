@@ -32,6 +32,7 @@ include_directories(
 
 add_library( front_end 
     src/kino_astar.cpp
+        src/simple_path.cpp
 )
 
 target_link_libraries( front_end

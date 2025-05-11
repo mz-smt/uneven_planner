@@ -21,6 +21,8 @@ namespace uneven_planner
         traj_opt.setFrontend(kino_astar);
         traj_opt.setEnvironment(uneven_map);
         pso_smoother.init(nh);
+        simple_path = std::make_shared<SimplePath>();
+        simple_path->init(nh);
 
         traj_pub = nh.advertise<mpc_controller::SE2Traj>("traj", 1);
         odom_sub = nh.subscribe<nav_msgs::Odometry>("odom", 1, &PlanManager::rcvOdomCallBack, this);
@@ -189,12 +191,16 @@ namespace uneven_planner
         traj_opt.setOdom(odom_pos, quaternion);
         traj_opt.verifyWorkCost(init_path);
 #elif PLAN_TYPE == PSO_SMOOTH
+        Eigen::Vector3f cur_pose(odom_pos.x(), odom_pos.y(), odom_pos.z());
+        Eigen::Vector3f end_pose(end_state.x(), end_state.y(), end_state.z());
+        std::vector<Eigen::Vector3f> simple_path_result;
+        simple_path->generatePath(cur_pose, end_pose, simple_path_result);
         pso_smoother.setOdom(odom_pos, quaternion);
         std::vector<Eigen::Vector3f> path_input;
         for (auto point : init_path) {
             path_input.emplace_back(point.x(), point.y(), point.z());
         }
-        pso_smoother.smooth(path_input);
+        pso_smoother.smooth(simple_path_result);
 #endif
         in_plan = false;
 

@@ -12,7 +12,7 @@
 #include <nav_msgs/Path.h>
 #include <nav_msgs/Odometry.h>
 #include <Eigen/Geometry>
-#include "utils/math_utils.hpp"
+#include "utils/math_util.hpp"
 
 namespace uneven_planner {
 
@@ -27,7 +27,7 @@ namespace uneven_planner {
                   max_backward_dis(0.3f),
                   weight_penalty_backward(500.0f),
                   weight_penalty_gear_switch(0.5f),
-                  weight_penalty_work(1000.0f),
+                  weight_penalty_work(20.0f),
                   verbose(true) {}
         float max_vel_x;
         float max_vel_x_backward;
@@ -123,14 +123,11 @@ namespace uneven_planner {
                     auto next_pose = pos;
                     auto delta_theta = wrapToPi(next_pose[2] - cur_pose[2]);
                     auto length = (next_pose - cur_pose).head(2).norm();
-                    std::cout << "debug current: " << cur_pose[0] << " " << cur_pose[1] << " " << cur_pose[2] / M_PI * 180
-                              << " to next point: " << next_pose[0] << " " << next_pose[1] << " " << next_pose[2] / M_PI * 180
-                              << " path dist: " << length << " theta diff: " << delta_theta << std::endl;
                     double psi_i = cur_pose[2];
                     computePointAttitude(theta_slope, psi_s, psi_i, pitch, roll);
                     double N_l, N_r;
                     computeForcesImproved(pitch, roll, N_l, N_r, vehicle_param_);
-                    const double mu = 1.2f;
+                    const double mu = 1.0f;
                     auto F_l = mu * N_l;
                     auto F_r = mu * N_r;
                     auto dir = is_reverse ? -1 : 1;
@@ -145,9 +142,11 @@ namespace uneven_planner {
                     auto delta_z = a * (next_pose.x() - cur_pose.x()) + b * (next_pose.y() - cur_pose.y())
                                    + 0.09 * (a * (cos(next_pose.z()) - cos(cur_pose.z())) + b * (sin(next_pose.z()) - sin(cur_pose.z())));
                     auto w_grav = vehicle_param_.mass * vehicle_param_.g * delta_z;
-                    auto delta_w = w_drive - w_grav;
+                    auto delta_w = w_drive;
                     auto cost = 1 / delta_w;
-                    std::cout << "debug path theta: " << psi_i / M_PI * 180 << " pitch: "
+                    std::cout << "debug current: " << cur_pose[0] << " " << cur_pose[1] << " " << cur_pose[2] / M_PI * 180
+                              << " to next point: " << next_pose[0] << " " << next_pose[1] << " " << next_pose[2] / M_PI * 180
+                              << " path dist: " << length << " theta diff: " << delta_theta << " pitch: "
                               << pitch / M_PI * 180 << " roll: " << roll / M_PI * 180 << " and forces: " << N_l << "," << N_r
                               << " force: " << F_l << " " << F_r << " dist: " << d_l << " " << d_r << " work drive: " << w_drive
                               << " delta z: " << delta_z << " work grav: " << w_grav << " cost: " << cost << std::endl;
@@ -327,6 +326,9 @@ namespace uneven_planner {
         Eigen::Quaterniond q_;
 
         Eigen::Vector3f speed_limit_;
+
+        ros::Publisher refactor_path_pub_;
+        ros::Publisher result_path_pub_;
     };
 }
 
