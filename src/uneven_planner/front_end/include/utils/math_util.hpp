@@ -12,6 +12,16 @@
 #include <iostream>
 
 namespace uneven_planner {
+
+    struct VehicleParams {
+        double mass;  // 车辆质量 m
+        double wheelbase;  // 轴距 L (前后轮间距)
+        double trackWidth;  // 轮距 W (左右轮间距)
+        double cgHeight;  // 重心高度 h
+        double g;  // 重力加速度 (例如 9.81 m/s²)
+        double rearWeightFraction;  // 后轴载重比例 k (例如 0.6)
+    };
+
     inline std::string str_format(const char* format, ...) {
         va_list args;
         va_start(args, format);

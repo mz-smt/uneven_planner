@@ -6,6 +6,7 @@ Panels:
       Expanded:
         - /odom1/Shape1
         - /front_end1
+        - /STOMP1
       Splitter Ratio: 0.5
     Tree Height: 839
   - Class: rviz/Selection
@@ -438,6 +439,30 @@ Visualization Manager:
       Topic: /simple_path/result_path
       Unreliable: false
       Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz/Path
+      Color: 173; 127; 168
+      Enabled: true
+      Head Diameter: 0.009999999776482582
+      Head Length: 0.009999999776482582
+      Length: 0.30000001192092896
+      Line Style: Lines
+      Line Width: 0.029999999329447746
+      Name: STOMP
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: Arrows
+      Queue Size: 10
+      Radius: 0.029999999329447746
+      Shaft Diameter: 0.003000000026077032
+      Shaft Length: 0.029999999329447746
+      Topic: /stomp/result_path
+      Unreliable: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 255; 255; 255
@@ -466,7 +491,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 5.6011962890625
+      Distance: 7.884884834289551
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -482,9 +507,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.9447972774505615
+      Pitch: 1.5697963237762451
       Target Frame: <Fixed Frame>
-      Yaw: 3.1248624324798584
+      Yaw: 3.1498637199401855
     Saved: ~
 Window Geometry:
   Displays:

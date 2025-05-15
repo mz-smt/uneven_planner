@@ -32,6 +32,9 @@ include_directories(
 add_library(back_end 
     src/alm_traj_opt.cpp
     src/pso_smoother.cpp
+        src/stomp_smoother.cpp
+        src/stomp.cpp
+        src/stomp_utils.cpp
 )
 
 target_link_libraries(back_end

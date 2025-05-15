@@ -23,6 +23,7 @@ namespace uneven_planner
         pso_smoother.init(nh);
         simple_path = std::make_shared<SimplePath>();
         simple_path->init(nh);
+        stomp_smoother.init(nh);
 
         traj_pub = nh.advertise<mpc_controller::SE2Traj>("traj", 1);
         odom_sub = nh.subscribe<nav_msgs::Odometry>("odom", 1, &PlanManager::rcvOdomCallBack, this);
@@ -201,6 +202,8 @@ namespace uneven_planner
             path_input.emplace_back(point.x(), point.y(), point.z());
         }
         pso_smoother.smooth(simple_path_result);
+//        stomp_smoother.setOdom(odom_pos, quaternion);
+//        stomp_smoother.smooth(simple_path_result);
 #endif
         in_plan = false;
 

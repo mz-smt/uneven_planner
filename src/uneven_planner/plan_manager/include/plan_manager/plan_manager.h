@@ -14,6 +14,7 @@
 #include "front_end/simple_path.hpp"
 #include "back_end/alm_traj_opt.h"
 #include "back_end/pso_smoother.hpp"
+#include "back_end/stomp_smoother.hpp"
 #include "mpc_controller/SE2Traj.h"
 
 #define ORIGIN_OPTIMIZE 0
@@ -41,6 +42,7 @@ namespace uneven_planner
             std::shared_ptr<SimplePath> simple_path;
             ALMTrajOpt traj_opt;
             PSOSmoother pso_smoother;
+            STOMPSmoother stomp_smoother;
             SE2Trajectory opted_traj;
 
             ros::Publisher traj_pub;

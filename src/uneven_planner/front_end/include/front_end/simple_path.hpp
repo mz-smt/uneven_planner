@@ -13,7 +13,7 @@
 namespace uneven_planner {
     class SimplePath {
     public:
-        explicit SimplePath(float rotate_step_ = M_PI / 36.0f,  // 5 deg
+        explicit SimplePath(float rotate_step_ = M_PI / 18.0f,  // 10 deg
                             float move_step_ = 0.2f, bool force_forward_ = true);
 
         ~SimplePath() = default;
