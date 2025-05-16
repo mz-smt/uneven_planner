@@ -27,7 +27,7 @@ namespace uneven_planner {
                   max_backward_dis(0.3f),
                   weight_penalty_backward(500.0f),
                   weight_penalty_gear_switch(0.5f),
-                  weight_penalty_work(20.0f),
+                  weight_penalty_work(50.0f),
                   verbose(true) {}
         float max_vel_x;
         float max_vel_x_backward;
@@ -117,7 +117,7 @@ namespace uneven_planner {
                     computePointAttitude(theta_slope, psi_s, psi_i, pitch, roll);
                     double N_l, N_r;
                     computeForcesImproved(pitch, roll, N_l, N_r, vehicle_param_);
-                    const double mu = 1.0f;
+                    const double mu = 5.0f;
                     auto F_l = mu * N_l;
                     auto F_r = mu * N_r;
                     auto dir = is_reverse ? -1 : 1;
@@ -132,7 +132,10 @@ namespace uneven_planner {
                     auto delta_z = a * (next_pose.x() - cur_pose.x()) + b * (next_pose.y() - cur_pose.y())
                                    + 0.09 * (a * (cos(next_pose.z()) - cos(cur_pose.z())) + b * (sin(next_pose.z()) - sin(cur_pose.z())));
                     auto w_grav = vehicle_param_.mass * vehicle_param_.g * delta_z;
-                    auto delta_w = w_drive;
+                    auto delta_w = w_drive - w_grav;
+                    if (delta_w < 0) {
+                        delta_w = 1e-6;
+                    }
                     auto cost = 1 / delta_w;
                     std::cout << "debug current: " << cur_pose[0] << " " << cur_pose[1] << " " << cur_pose[2] / M_PI * 180
                               << " to next point: " << next_pose[0] << " " << next_pose[1] << " " << next_pose[2] / M_PI * 180
