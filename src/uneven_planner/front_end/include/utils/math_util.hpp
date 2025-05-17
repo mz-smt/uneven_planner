@@ -495,6 +495,27 @@ namespace uneven_planner {
 
         return result;
     }
+
+    inline Eigen::Vector2f rotateVector2D(const Eigen::Vector2f& vec, float theta) {
+
+        //        const auto sin_theta = motion_planner::fast_sin(theta);
+        //        const auto cos_theta = motion_planner::fast_cos(theta);
+        const auto sin_theta = std::sin(theta);
+        const auto cos_theta = std::cos(theta);
+
+        Eigen::Vector2f result;
+        result[0] = cos_theta * vec[0] - sin_theta * vec[1];
+        result[1] = sin_theta * vec[0] + cos_theta * vec[1];
+        return result;
+    }
+
+    inline Eigen::Vector3f groundFrameToBodyFrame(const Eigen::Vector3f& query,
+                                                  const Eigen::Vector3f& cur_pose) {
+        Eigen::Vector3f pose;
+        pose.head(2) = rotateVector2D(query.head(2) - cur_pose.head(2), -cur_pose[2]);
+        pose[2] = (float)wrapToPi(query[2] - cur_pose[2]);
+        return pose;
+    }
 }
 
 #endif //SRC_MATH_UTIL_HPP

@@ -23,6 +23,7 @@ void PSOSmoother::init(ros::NodeHandle &nh) {
     node_ = nh;
     refactor_path_pub_ = node_.advertise<nav_msgs::Path>("/pso/refactor_path", 1);
     result_path_pub_ = node_.advertise<nav_msgs::Path>("/pso/result_path", 1);
+    optimize_point_pub_ = node_.advertise<geometry_msgs::PoseStamped>("/pso/optimize_point", 1);
     //callback to receive trigger to smooth, input path: 1.some trajectories
 }
 
@@ -207,6 +208,15 @@ bool PSOSmoother::smooth(std::vector<Eigen::Vector3f>& path) {
         result_path.poses.push_back(temp_pose);
     }
     result_path_pub_.publish(result_path);
+    auto optimize_point = m_optimal_path_.at(1);
+    geometry_msgs::PoseStamped ros_pose;
+    ros_pose.header.frame_id = "world";
+    ros_pose.header.stamp = ros::Time::now();
+    ros_pose.pose.position.x = optimize_point.x();
+    ros_pose.pose.position.y = optimize_point.y();
+    ros_pose.pose.position.z = 0.0;
+    ros_pose.pose.orientation = tf::createQuaternionMsgFromYaw(optimize_point.z());
+    optimize_point_pub_.publish(ros_pose);
     return is_success;
 }
 

@@ -27,7 +27,7 @@ namespace uneven_planner {
                   max_backward_dis(0.3f),
                   weight_penalty_backward(500.0f),
                   weight_penalty_gear_switch(0.5f),
-                  weight_penalty_work(50.0f),
+                  weight_penalty_work(100.0f),
                   verbose(true) {}
         float max_vel_x;
         float max_vel_x_backward;
@@ -107,6 +107,10 @@ namespace uneven_planner {
                     auto angle_cost =
                             std::fabs(wrapToPi(pos(2) - last_position(2))) / max_angular_vel;
                     spline_cost += std::fmax(dist_cost, angle_cost);
+                    auto body_pose = groundFrameToBodyFrame(pos, cur_pose_);
+                    if (body_pose[0] > 0.2) {
+                        spline_cost += 1000;
+                    }
                     /// force penalty
                     double pitch, roll;
                     auto cur_pose = last_position;
@@ -322,6 +326,7 @@ namespace uneven_planner {
 
         ros::Publisher refactor_path_pub_;
         ros::Publisher result_path_pub_;
+        ros::Publisher optimize_point_pub_;
     };
 }
 
