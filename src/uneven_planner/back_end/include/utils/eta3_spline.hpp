@@ -43,7 +43,7 @@ namespace uneven_planner {
 
             const auto dist = hypot(start_x - end_x, start_y - end_y);
             /// n can be adjusted. 1.0f is suboptimal param here.
-            const auto n = 0.5f;
+            const auto n = 0.5f * dist;
             const auto square_n = n * n;
 
             const auto dx = xB - xA;

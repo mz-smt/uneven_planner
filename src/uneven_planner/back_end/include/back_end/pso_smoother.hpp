@@ -27,7 +27,7 @@ namespace uneven_planner {
                   max_backward_dis(0.3f),
                   weight_penalty_backward(500.0f),
                   weight_penalty_gear_switch(0.5f),
-                  weight_penalty_work(100.0f),
+                  weight_penalty_work(20.0f),
                   verbose(true) {}
         float max_vel_x;
         float max_vel_x_backward;
@@ -121,7 +121,7 @@ namespace uneven_planner {
                     computePointAttitude(theta_slope, psi_s, psi_i, pitch, roll);
                     double N_l, N_r;
                     computeForcesImproved(pitch, roll, N_l, N_r, vehicle_param_);
-                    const double mu = 5.0f;
+                    const double mu = 1.2f;
                     auto F_l = mu * N_l;
                     auto F_r = mu * N_r;
                     auto dir = is_reverse ? -1 : 1;

@@ -21,7 +21,7 @@
 #define VISUAL_COST 1
 #define PSO_SMOOTH 2
 #define PATH_COMPARE 3
-#define PLAN_TYPE PATH_COMPARE
+#define PLAN_TYPE PSO_SMOOTH
 
 namespace uneven_planner
 {
