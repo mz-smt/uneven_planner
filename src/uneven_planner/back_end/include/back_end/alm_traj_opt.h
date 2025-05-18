@@ -11,7 +11,7 @@
 #include "utils/se2traj.hpp"
 #include "utils/lbfgs.hpp"
 
-#define VISUAL_TYPE A_STAR_PATH
+#define VISUAL_TYPE SAMPLE_PATH
 #define A_STAR_PATH 0
 #define SAMPLE_PATH 1
 
@@ -110,6 +110,7 @@ namespace uneven_planner
                                 const double & totalTime            );
             void verifyWorkCost(std::vector<Eigen::Vector3d>& path);
             void setOdom(const Eigen::Vector3d& odom_pose, const Eigen::Quaterniond& quaternion_input);
+            void samplePathCost(const std::vector<std::vector<Eigen::Vector3f>>& path_vec);
             void initScaling(Eigen::VectorXd x0);
             void calConstrainCostGrad(double& cost, Eigen::MatrixXd& gdCxy, Eigen::VectorXd &gdTxy, \
                                       Eigen::MatrixXd& gdCyaw, Eigen::VectorXd &gdTyaw);

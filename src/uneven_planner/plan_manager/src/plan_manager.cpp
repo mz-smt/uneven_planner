@@ -1,4 +1,6 @@
+#include <tf/transform_datatypes.h>
 #include "plan_manager/plan_manager.h"
+#include "utils/cubic_spline.hpp"
 
 namespace uneven_planner
 {
@@ -28,6 +30,7 @@ namespace uneven_planner
         traj_pub = nh.advertise<mpc_controller::SE2Traj>("traj", 1);
         odom_sub = nh.subscribe<nav_msgs::Odometry>("odom", 1, &PlanManager::rcvOdomCallBack, this);
         target_sub = nh.subscribe<geometry_msgs::PoseStamped>("/move_base_simple/goal", 1, &PlanManager::rcvWpsCallBack, this);
+        sample_path_pub = nh.advertise<visualization_msgs::MarkerArray>("sample_path", 1);
         
         return;
     }
@@ -56,7 +59,7 @@ namespace uneven_planner
                                   msg.pose.position.y, \
                                   atan2(2.0*msg.pose.orientation.z*msg.pose.orientation.w, \
                                         2.0*pow(msg.pose.orientation.w, 2)-1.0)             );
-        
+
         std::vector<Eigen::Vector3d> init_path = kino_astar->plan(odom_pos, end_state);
         if (init_path.empty())
         {
@@ -204,6 +207,57 @@ namespace uneven_planner
         pso_smoother.smooth(simple_path_result);
 //        stomp_smoother.setOdom(odom_pos, quaternion);
 //        stomp_smoother.smooth(simple_path_result);
+#elif PLAN_TYPE == PATH_COMPARE
+        float v_min = 0.0f;
+        float v_max = 5.0f;
+        int sample_num = 5;
+        auto start = Eigen::Vector3f(odom_pos.x(), odom_pos.y(), odom_pos.z());
+        auto end = Eigen::Vector3f(end_state.x(), end_state.y(), end_state.z());
+        std::vector<std::vector<Eigen::Vector3f>> path_vec;
+        for (int i = 0; i - 1 < sample_num; i++) {
+            auto v = v_min + (v_max - v_min) / sample_num * i;
+            auto line = std::make_shared<SE2CubicSplineC2>(start, end, v, v);
+            std::vector<Eigen::Vector3f> sample_path;
+            sample_path.emplace_back(start);
+            for (int j = 1; j < sample_num; j++) {
+                auto radio = (float)j/sample_num;
+                auto pos = line->evaluate(radio);
+                sample_path.emplace_back(pos);
+            }
+            sample_path.emplace_back(end);
+            path_vec.emplace_back(sample_path);
+        }
+        std::vector<Eigen::Vector3f> colors_ = {
+                {1.0, 0.0, 0.0},  // 红
+                {0.0, 1.0, 0.0},  // 绿
+                {0.0, 0.0, 1.0},  // 蓝
+                {1.0, 1.0, 0.0},  // 黄
+                {1.0, 0.0, 1.0}   // 紫
+        };
+        visualization_msgs::MarkerArray arr;
+        for (size_t i = 0; i < path_vec.size(); ++i) {
+            visualization_msgs::Marker m;
+            m.header.frame_id = "world";
+            m.header.stamp    = ros::Time::now();
+            m.ns              = "traj_bundle";
+            m.id              = i;                        // 不同轨迹不同 id
+            m.type            = visualization_msgs::Marker::LINE_STRIP;
+            m.action          = visualization_msgs::Marker::ADD;
+            m.scale.x = 0.1;            // 线宽
+            m.color.r = colors_[i % colors_.size()][0];
+            m.color.g = colors_[i % colors_.size()][1];
+            m.color.b = colors_[i % colors_.size()][2];
+            m.color.a = 0.8;            // 透明度
+            for (auto& p : path_vec[i]) {
+                geometry_msgs::Point pt;
+                pt.x = p.x(); pt.y = p.y(); pt.z = 0.0;
+                m.points.push_back(pt);
+            }
+            arr.markers.push_back(m);
+        }
+        sample_path_pub.publish(arr);
+        traj_opt.setOdom(odom_pos, quaternion);
+        traj_opt.samplePathCost(path_vec);
 #endif
         in_plan = false;
 

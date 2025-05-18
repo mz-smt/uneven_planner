@@ -6,8 +6,6 @@ Panels:
       Expanded:
         - /odom1/Shape1
         - /front_end1
-        - /PSOPath1
-        - /Pose1
       Splitter Ratio: 0.5
     Tree Height: 839
   - Class: rviz/Selection
@@ -480,6 +478,14 @@ Visualization Manager:
       Topic: /pso/optimize_point
       Unreliable: false
       Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /manager_node/sample_path
+      Name: MarkerArray
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 255; 255; 255
@@ -508,7 +514,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 2.148296356201172
+      Distance: 7.472957134246826
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -524,9 +530,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.014796401374042034
+      Pitch: 1.5647963285446167
       Target Frame: <Fixed Frame>
-      Yaw: 3.3448619842529297
+      Yaw: 3.1398606300354004
     Saved: ~
 Window Geometry:
   Displays:

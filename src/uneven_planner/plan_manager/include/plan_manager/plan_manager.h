@@ -20,7 +20,8 @@
 #define ORIGIN_OPTIMIZE 0
 #define VISUAL_COST 1
 #define PSO_SMOOTH 2
-#define PLAN_TYPE PSO_SMOOTH
+#define PATH_COMPARE 3
+#define PLAN_TYPE PATH_COMPARE
 
 namespace uneven_planner
 {
@@ -48,6 +49,7 @@ namespace uneven_planner
             ros::Publisher traj_pub;
             ros::Subscriber odom_sub;
             ros::Subscriber target_sub;
+            ros::Publisher sample_path_pub;
             
         public:
             void init(ros::NodeHandle& nh);

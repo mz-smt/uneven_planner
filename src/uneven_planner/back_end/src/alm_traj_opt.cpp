@@ -288,6 +288,90 @@ namespace uneven_planner
             << rpy[2] / M_PI * 180 << "," << rpy[1] / M_PI * 180 << "," << rpy[0] / M_PI * 180 << std::endl;
     }
 
+    void ALMTrajOpt::samplePathCost(const std::vector<std::vector<Eigen::Vector3f>> &path_vec) {
+        double theta_slope;
+        double psi_s;
+        std::vector<float> cost_total_vec;
+        computeSlopeAngles(quaternion, odom_pos[2], theta_slope, psi_s);
+        for (auto path : path_vec) {
+            float cost_total = 0.0f;
+            std::vector<bool> dir_vec;
+            dir_vec.resize(path.size(), true);
+            for (auto& point : path) {
+                point[2] = wrapToPi(point[2]);
+            }
+            double pitch, roll;
+            std::vector<float> cost_vec;
+            cost_vec.resize(path.size(), 0.0f);
+            for (size_t i = 0; i < path.size() - 1; i++) {
+                auto cur_pose = path.at(i);
+                auto next_pose = path.at(i + 1);
+                auto delta_theta = wrapToPi(next_pose[2] - cur_pose[2]);
+                auto length = (next_pose - cur_pose).head(2).norm();
+                std::cout << "debug current: " << cur_pose[0] << " " << cur_pose[1] << " " << cur_pose[2] / M_PI * 180
+                          << " to next point: " << next_pose[0] << " " << next_pose[1] << " " << next_pose[2] / M_PI * 180
+                          << " path dist: " << length << " theta diff: " << delta_theta << std::endl;
+                double psi_i = cur_pose[2];
+                computePointAttitude(theta_slope, psi_s, psi_i, pitch, roll);
+                double N_l, N_r;
+                computeForcesImproved(pitch, roll, N_l, N_r);
+                const double mu = 1.2f;
+                auto F_l = mu * N_l;
+                auto F_r = mu * N_r;
+                auto dir = dir_vec.at(i) ? 1 : -1;
+                auto d_r = dir * length + wheel_dist / 2 * delta_theta;
+                auto d_l = dir * length - wheel_dist / 2 * delta_theta;
+                if (length < 1e-6 && std::fabs(delta_theta) < 1e-6) {
+                    cost_vec.at(i) = 0;
+                    continue;
+                }
+                auto w_drive = F_l * std::fabs(d_l) + F_r * std::fabs(d_r);
+                auto a = tan(theta_slope) * cos(psi_s);
+                auto b = tan(theta_slope) * sin(psi_s);
+                auto delta_z = a * (next_pose.x() - cur_pose.x()) + b * (next_pose.y() - cur_pose.y())
+                               + 0.09 * (a * (cos(next_pose.z()) - cos(cur_pose.z())) + b * (sin(next_pose.z()) - sin(cur_pose.z())));
+                auto w_grav = mass * g * delta_z;
+                auto delta_w = w_drive - w_grav;
+                auto cost = 1 / delta_w;
+                cost_vec.at(i) = cost;
+                cost_total += cost;
+                std::cout << "debug path index: " << i << " theta: " << psi_i / M_PI * 180 << " pitch: "
+                          << pitch / M_PI * 180 << " roll: " << roll / M_PI * 180 << " and forces: " << N_l << "," << N_r
+                          << " force: " << F_l << " " << F_r << " dist: " << d_l << " " << d_r << " work drive: " << w_drive
+                          << " delta z: " << delta_z << " work grav: " << w_grav << " cost: " << cost << std::endl;
+            }
+            std::cout << "debug current path cost total: " << cost_total << std::endl;
+            cost_total_vec.emplace_back(cost_total);
+        }
+        visualization_msgs::MarkerArray arr;
+        arr.markers.clear();
+
+        for (size_t i = 0; i < path_vec.size(); i++) {
+            auto p = path_vec.at(i).at(2);
+            auto height = cost_total_vec.at(i) * 10;
+            visualization_msgs::Marker m;
+            m.header.frame_id = "world";
+            m.header.stamp    = ros::Time::now();
+            m.ns              = "height_cylinders";
+            m.id              = i;
+            m.type            = visualization_msgs::Marker::CYLINDER;
+            m.action          = visualization_msgs::Marker::ADD;
+            m.scale.x         = 0.1;
+            m.scale.y         = 0.1;
+            m.scale.z         = height;
+            m.pose.position.x = p.x();
+            m.pose.position.y = p.y();
+            m.pose.position.z = height * 0.5;
+            m.pose.orientation.w = 1.0;
+            m.color.r = 1.0; m.color.g = 0.0; m.color.b = 0.0; m.color.a = 0.6;
+
+            arr.markers.push_back(m);
+        }
+
+        // 一次性发布全部
+        marker_arr_pub.publish(arr);
+    }
+
     void ALMTrajOpt::verifyWorkCost(std::vector<Eigen::Vector3d> &path) {
         std::vector<bool> dir_vec;
         dir_vec.resize(path.size(), true);
@@ -353,7 +437,7 @@ namespace uneven_planner
 
         for (size_t i = 0; i < path.size(); i++) {
             auto p = path.at(i);
-            auto height = cost_vec.at(i) * 20;
+            auto height = cost_vec.at(i) * 100;
             visualization_msgs::Marker m;
             m.header.frame_id = "world";
             m.header.stamp    = ros::Time::now();
