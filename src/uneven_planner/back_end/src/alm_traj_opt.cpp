@@ -295,8 +295,6 @@ namespace uneven_planner
         computeSlopeAngles(quaternion, odom_pos[2], theta_slope, psi_s);
         for (auto path : path_vec) {
             float cost_total = 0.0f;
-            std::vector<bool> dir_vec;
-            dir_vec.resize(path.size(), true);
             for (auto& point : path) {
                 point[2] = wrapToPi(point[2]);
             }
@@ -318,7 +316,15 @@ namespace uneven_planner
                 const double mu = 1.2f;
                 auto F_l = mu * N_l;
                 auto F_r = mu * N_r;
-                auto dir = dir_vec.at(i) ? 1 : -1;
+                Eigen::Vector3f pose_diff = next_pose - cur_pose;
+                float connection_angle = atan2(pose_diff.y(), pose_diff.x());
+                float rotate_sum = abs(wrapToPi(connection_angle - cur_pose[2]))
+                                   + abs(wrapToPi(next_pose[2] - connection_angle));
+                auto forward = true;
+                if (rotate_sum > M_PI) {
+                    forward = false;
+                }
+                auto dir = forward ? 1 : -1;
                 auto d_r = dir * length + wheel_dist / 2 * delta_theta;
                 auto d_l = dir * length - wheel_dist / 2 * delta_theta;
                 if (length < 1e-6 && std::fabs(delta_theta) < 1e-6) {
@@ -337,7 +343,7 @@ namespace uneven_planner
                 cost_total += cost;
                 std::cout << "debug path index: " << i << " theta: " << psi_i / M_PI * 180 << " pitch: "
                           << pitch / M_PI * 180 << " roll: " << roll / M_PI * 180 << " and forces: " << N_l << "," << N_r
-                          << " force: " << F_l << " " << F_r << " dist: " << d_l << " " << d_r << " work drive: " << w_drive
+                          << " force: " << F_l << " " << F_r << " dist: " << d_l << " " << d_r << " forward: " << forward << " work drive: " << w_drive
                           << " delta z: " << delta_z << " work grav: " << w_grav << " cost: " << cost << std::endl;
             }
             std::cout << "debug current path cost total: " << cost_total << std::endl;
@@ -373,10 +379,8 @@ namespace uneven_planner
     }
 
     void ALMTrajOpt::verifyWorkCost(std::vector<Eigen::Vector3d> &path) {
-        std::vector<bool> dir_vec;
-        dir_vec.resize(path.size(), true);
 #if VISUAL_TYPE == SAMPLE_PATH
-        path = samplePoints(odom_pos, 0.5, 30, dir_vec);
+        path = samplePoints(odom_pos, 0.5, 30);
 #endif
         for (auto& point : path) {
             point[2] = wrapToPi(point[2]);
@@ -410,7 +414,14 @@ namespace uneven_planner
             const double mu = 1.2f;
             auto F_l = mu * N_l;
             auto F_r = mu * N_r;
-            auto dir = dir_vec.at(i) ? 1 : -1;
+            float connection_angle = atan2(next_pose.y() - cur_pose.y(), next_pose.x() - cur_pose.x());
+            float rotate_sum = abs(wrapToPi(connection_angle - cur_pose[2]))
+                               + abs(wrapToPi(next_pose[2] - connection_angle));
+            auto forward = true;
+            if (rotate_sum > M_PI) {
+                forward = false;
+            }
+            auto dir = forward ? 1 : -1;
             auto d_r = dir * length + wheel_dist / 2 * delta_theta;
             auto d_l = dir * length - wheel_dist / 2 * delta_theta;
             if (length < 1e-6 && std::fabs(delta_theta) < 1e-6) {
@@ -428,7 +439,7 @@ namespace uneven_planner
             cost_vec.at(i) = cost;
             std::cout << "debug path index: " << i << " theta: " << psi_i / M_PI * 180 << " pitch: "
                 << pitch / M_PI * 180 << " roll: " << roll / M_PI * 180 << " and forces: " << N_l << "," << N_r
-                << " force: " << F_l << " " << F_r << " dist: " << d_l << " " << d_r << " work drive: " << w_drive
+                << " force: " << F_l << " " << F_r << " dist: " << d_l << " " << d_r << " forward: " << forward << " work drive: " << w_drive
                 << " delta z: " << delta_z << " work grav: " << w_grav << " cost: " << cost << std::endl;
         }
 
@@ -523,13 +534,11 @@ namespace uneven_planner
     }
 
     std::vector<Eigen::Vector3d>
-    ALMTrajOpt::samplePoints(const Eigen::Vector3d &center, const float &r, const float &step_deg,
-                             std::vector<bool>& dir_vec) {
+    ALMTrajOpt::samplePoints(const Eigen::Vector3d &center, const float &r, const float &step_deg) {
         std::vector<Eigen::Vector3d> pts;
         int N = int(360.0 / step_deg);
         double dtheta = step_deg * M_PI / 180.0;  // 将度转为弧度 :contentReference[oaicite:0]{index=0}
 
-        dir_vec.resize(N, true);
         for (int k = 0; k < N; ++k) {
             double theta = k * dtheta;
             // 计算平面坐标
@@ -546,7 +555,6 @@ namespace uneven_planner
             double psi = (d1 <= d2) ? alpha1 : alpha2;
             // 保存 (x, y, psi)
             pts.emplace_back(x, y, psi);
-            dir_vec.at(k) = d1 <= d2;
         }
         return pts;
     }
