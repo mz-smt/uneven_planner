@@ -353,7 +353,7 @@ namespace uneven_planner
         arr.markers.clear();
 
         for (size_t i = 0; i < path_vec.size(); i++) {
-            auto p = path_vec.at(i).at(2);
+            auto p = path_vec.at(i).at((path_vec.at(i).size() - 1) / 2);
             auto height = cost_total_vec.at(i) * 10;
             visualization_msgs::Marker m;
             m.header.frame_id = "world";
