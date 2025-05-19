@@ -15,13 +15,15 @@
 #include "back_end/alm_traj_opt.h"
 #include "back_end/pso_smoother.hpp"
 #include "back_end/stomp_smoother.hpp"
+#include "utils/path_optimize/path_optimizer.hpp"
 #include "mpc_controller/SE2Traj.h"
 
 #define ORIGIN_OPTIMIZE 0
 #define VISUAL_COST 1
 #define PSO_SMOOTH 2
 #define PATH_COMPARE 3
-#define PLAN_TYPE PATH_COMPARE
+#define TEB_OPTIMIZE 4
+#define PLAN_TYPE TEB_OPTIMIZE
 
 namespace uneven_planner
 {
@@ -44,6 +46,7 @@ namespace uneven_planner
             ALMTrajOpt traj_opt;
             PSOSmoother pso_smoother;
             STOMPSmoother stomp_smoother;
+            std::shared_ptr<ninebot_algo::motion_planner::PathOptimizer> teb_;
             SE2Trajectory opted_traj;
 
             ros::Publisher traj_pub;

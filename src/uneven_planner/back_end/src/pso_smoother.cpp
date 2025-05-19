@@ -137,11 +137,11 @@ bool PSOSmoother::smooth(std::vector<Eigen::Vector3f>& path) {
     }
     m_optimal_path_.emplace_back(m_init_path_.back());
     if (param_.verbose) {
-        std::string path_info;
-        for (const auto& point : m_optimal_path_) {
-            path_info += str_format("{%.2f,%.2f,%.2f} ", point[0], point[1], point[2]);
-        }
-        std::cout << "Optimal path:" << path_info << std::endl;
+//        std::string path_info;
+//        for (const auto& point : m_optimal_path_) {
+//            path_info += str_format("{%.2f,%.2f,%.2f} ", point[0], point[1], point[2]);
+//        }
+//        std::cout << "Optimal path:" << path_info << std::endl;
     }
 
     // construct optimal trajectory
@@ -189,11 +189,11 @@ bool PSOSmoother::smooth(std::vector<Eigen::Vector3f>& path) {
         return false;
     }
 
-    std::string path_info;
-    for (const auto& point : m_optimal_path_) {
-        path_info += str_format("{%.2f,%.2f,%.2f} ", point[0], point[1], point[2]);
-    }
-    std::cout << "Optimal path:" << path_info << ", value=" << result.fval << ", success: " << is_success << std::endl;
+//    std::string path_info;
+//    for (const auto& point : m_optimal_path_) {
+//        path_info += str_format("{%.2f,%.2f,%.2f} ", point[0], point[1], point[2]);
+//    }
+//    std::cout << "Optimal path:" << path_info << ", value=" << result.fval << ", success: " << is_success << std::endl;
 
     path = result_path_;
     nav_msgs::Path result_path;
@@ -230,12 +230,12 @@ PSOSmoother::refactorPath(const std::vector<Eigen::Vector3f> &init_path, std::ve
             + 1);
     points_num = std::min(MaxPointSize, points_num);
     if (param_.verbose) {
-        std::cout << "Total path points size:" << points_num << std::endl;
-        std::string init_path_info;
-        for (const auto& point : init_path) {
-            init_path_info += str_format("{%.2f,%.2f,%.2f},", point[0], point[1], point[2]);
-        }
-        std::cout << "Init path: " << init_path_info << std::endl;
+//        std::cout << "Total path points size:" << points_num << std::endl;
+//        std::string init_path_info;
+//        for (const auto& point : init_path) {
+//            init_path_info += str_format("{%.2f,%.2f,%.2f},", point[0], point[1], point[2]);
+//        }
+//        std::cout << "Init path: " << init_path_info << std::endl;
     }
 
     // remove pure rotate point or too close point
@@ -250,11 +250,11 @@ PSOSmoother::refactorPath(const std::vector<Eigen::Vector3f> &init_path, std::ve
         }
     }
     if (param_.verbose) {
-        std::string temp_path_info;
-        for (const auto& point : refactor_path) {
-            temp_path_info += str_format("{%.2f,%.2f,%.2f},", point[0], point[1], point[2]);
-        }
-        std::cout << "Init path after remove too close points: " << temp_path_info << std::endl;
+//        std::string temp_path_info;
+//        for (const auto& point : refactor_path) {
+//            temp_path_info += str_format("{%.2f,%.2f,%.2f},", point[0], point[1], point[2]);
+//        }
+//        std::cout << "Init path after remove too close points: " << temp_path_info << std::endl;
     }
 
     /// add point between max distance points
@@ -308,10 +308,10 @@ PSOSmoother::refactorPath(const std::vector<Eigen::Vector3f> &init_path, std::ve
 
     // show path info
     if (param_.verbose) {
-        std::string refactor_path_info;
-        for (const auto& point : refactor_path) {
-            refactor_path_info += str_format("{%.2f,%.2f,%.2f},", point[0], point[1], point[2]);
-        }
-        std::cout << "Refactor path: " << refactor_path_info << std::endl;
+//        std::string refactor_path_info;
+//        for (const auto& point : refactor_path) {
+//            refactor_path_info += str_format("{%.2f,%.2f,%.2f},", point[0], point[1], point[2]);
+//        }
+//        std::cout << "Refactor path: " << refactor_path_info << std::endl;
     }
 }

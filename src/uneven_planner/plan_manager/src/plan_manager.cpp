@@ -2,6 +2,7 @@
 #include "plan_manager/plan_manager.h"
 #include "utils/cubic_spline.hpp"
 
+using namespace ninebot_algo::motion_planner;
 namespace uneven_planner
 {
     void PlanManager::init(ros::NodeHandle& nh)
@@ -26,6 +27,8 @@ namespace uneven_planner
         simple_path = std::make_shared<SimplePath>();
         simple_path->init(nh);
         stomp_smoother.init(nh);
+        teb_ = std::make_shared<PathOptimizer>();
+        teb_->init(nh);
 
         traj_pub = nh.advertise<mpc_controller::SE2Traj>("traj", 1);
         odom_sub = nh.subscribe<nav_msgs::Odometry>("odom", 1, &PlanManager::rcvOdomCallBack, this);
@@ -258,6 +261,14 @@ namespace uneven_planner
         sample_path_pub.publish(arr);
         traj_opt.setOdom(odom_pos, quaternion);
         traj_opt.samplePathCost(path_vec);
+#elif PLAN_TYPE == TEB_OPTIMIZE
+        Eigen::Vector3f cur_pose(odom_pos.x(), odom_pos.y(), odom_pos.z());
+        Eigen::Vector3f end_pose(end_state.x(), end_state.y(), end_state.z());
+        std::vector<Eigen::Vector3f> simple_path_result;
+        simple_path->generatePath(cur_pose, end_pose, simple_path_result);
+        teb_->setQuaternion(quaternion);
+        teb_->setReferenceTrajectory(simple_path_result);
+        teb_->makePlan(cur_pose, {0, 0});
 #endif
         in_plan = false;
 

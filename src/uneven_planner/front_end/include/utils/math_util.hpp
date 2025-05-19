@@ -22,17 +22,17 @@ namespace uneven_planner {
         double rearWeightFraction;  // 后轴载重比例 k (例如 0.6)
     };
 
-    inline std::string str_format(const char* format, ...) {
-        va_list args;
-        va_start(args, format);
-        size_t len = std::vsnprintf(NULL, 0, format, args);
-        va_end(args);
-        std::vector<char> vec(len + 1);
-        va_start(args, format);
-        std::vsnprintf(&vec[0], len + 1, format, args);
-        va_end(args);
-        return &vec[0];
-    }
+//    inline std::string str_format(const char* format, ...) {
+//        va_list args;
+//        va_start(args, format);
+//        size_t len = std::vsnprintf(NULL, 0, format, args);
+//        va_end(args);
+//        std::vector<char> vec(len + 1);
+//        va_start(args, format);
+//        std::vsnprintf(&vec[0], len + 1, format, args);
+//        va_end(args);
+//        return &vec[0];
+//    }
 
     inline float cos_approximation(float x) {
         constexpr auto c1 = 0.9999932946f;
@@ -515,6 +515,52 @@ namespace uneven_planner {
         pose.head(2) = rotateVector2D(query.head(2) - cur_pose.head(2), -cur_pose[2]);
         pose[2] = (float)wrapToPi(query[2] - cur_pose[2]);
         return pose;
+    }
+    inline int getNearestWayPoint(const std::vector<Eigen::Vector3f>& path, const Eigen::Vector3f& pose, int start_idx,
+                                  int end_index, float max_dist) {
+        if (path.size() == 0) {
+            return -1;
+        }
+        int idx_min = start_idx;
+        int start_calc_index = start_idx;
+        if (start_calc_index == -1) {
+            float min_dist = 10000000.0f;
+            int idx = 0;
+            for (const auto & point : path) {
+                float dist = (point - pose.head(2)).squaredNorm();
+                idx++;
+                if (dist < min_dist) {
+                    min_dist = dist;
+                    idx_min = idx;
+                }
+            }
+            idx_min = (idx_min - 1) < 0 ? 0 : (idx_min - 1);
+            //        ALOGD("start_idx: %d, dist to cur_idx: %f", start_idx,(traj.getPoint(start_idx).pose.head(2) - pose.head(2)).squaredNorm());
+        } else {
+            start_calc_index = (start_idx > path.size()) ? path.size() : start_idx;
+            start_calc_index = (start_idx > 0) ? start_idx : 0;
+
+            float min_dist = 10000000.0f;
+            idx_min = start_calc_index;
+            float trajectory_dist = 0.0f;
+            for (int i = start_calc_index; i < end_index + 1; i++) {
+                /* Squared norm */
+                float dist = (path.at(i).head(2) - pose.head(2)).squaredNorm();
+                if (dist < min_dist) {
+                    min_dist = dist;
+                    idx_min = i;
+                }
+                if (i == path.size() - 1) {
+                    continue;
+                }
+                float dist_to_next = (path.at(i) - path.at(i + 1)).head(2).norm();
+                trajectory_dist += dist_to_next;
+                if ((i >= start_calc_index) && (trajectory_dist > max_dist)) {
+                    break;
+                }
+            }
+        }
+        return idx_min;
     }
 }
 
