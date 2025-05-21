@@ -123,6 +123,8 @@ namespace uneven_planner
             void computeForcesImproved(double pitch, double roll, double& N_L, double& N_R);
             std::vector<Eigen::Vector3d> samplePoints(const Eigen::Vector3d& center, const float& r,
                                                       const float& step_deg);
+            std::vector<Eigen::Vector3f> samplePointsV2(const Eigen::Vector3d& center);
+            Eigen::Vector3f computeEndPoint(const double& v, const double& w, double t = 1.0f);
             inline void setFrontend(const KinoAstar::Ptr& front_end);
             inline void setEnvironment(const UnevenMap::Ptr& env);
             inline void updateDualVars();

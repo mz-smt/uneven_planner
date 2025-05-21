@@ -14,6 +14,7 @@
 #include <Eigen/Dense>
 #include <memory>
 #include <ros/ros.h>
+#include <std_msgs/ColorRGBA.h>
 #include "utils/math_util.hpp"
 
 /* Debug info */
@@ -171,6 +172,21 @@ namespace ninebot_algo {
                         std::atan2(std::sin(raw), std::cos(raw));  // :contentReference[oaicite:7]{index=7}
             }
 
+            std_msgs::ColorRGBA hsvToRgba(float h, float s, float v, float a=1.0f) {
+                float r, g, b;
+                int i = int(h * 6);
+                float f = h*6 - i, p = v*(1-s), q = v*(1-f*s), t = v*(1-(1-f)*s);
+                switch(i % 6) {
+                    case 0: r=v; g=t; b=p; break;
+                    case 1: r=q; g=v; b=p; break;
+                    case 2: r=p; g=v; b=t; break;
+                    case 3: r=p; g=q; b=v; break;
+                    case 4: r=t; g=p; b=v; break;
+                    case 5: r=v; g=p; b=q; break;
+                }
+                std_msgs::ColorRGBA c; c.r=r; c.g=g; c.b=b; c.a=a; return c;
+            }
+
         public:
             static Eigen::Vector2f extractVelocity(const Eigen::Vector3d& pose_1,
                                                    const Eigen::Vector3d& pose_2, double dt);
@@ -205,7 +221,8 @@ namespace ninebot_algo {
             float theta_slope_;
             float psi_s_;
             uneven_planner::VehicleParams params_;
-            std::vector<std::vector<Eigen::Vector3f>> debug_trajs_;
+            std::vector<std::vector<Eigen::Vector3d>> debug_trajs_;
+            std::vector<std::vector<float>> traj_cost_vec_;
             ros::Publisher teb_debug_pub_;
             ros::Publisher teb_result_pub_;
         public:

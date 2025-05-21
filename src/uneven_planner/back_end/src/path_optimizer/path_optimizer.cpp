@@ -182,7 +182,12 @@ PlannerStatus PathOptimizer::makePlan(const Eigen::Vector3f& pose, const Eigen::
     };
     visualization_msgs::MarkerArray arr;
     ros::Time now = ros::Time::now();
+    float cost_min = 1e9, cost_max = -1e9;
     for (size_t i = 0; i < debug_trajs_.size(); i++) {
+        for (size_t j = 0; j < debug_trajs_[i].size(); ++j) {
+            cost_min = std::min(cost_min, traj_cost_vec_[i][j]);
+            cost_max = std::max(cost_max, traj_cost_vec_[i][j]);
+        }
         visualization_msgs::Marker line;
         line.header.frame_id = "world";
         line.header.stamp    = now;
@@ -202,6 +207,13 @@ PlannerStatus PathOptimizer::makePlan(const Eigen::Vector3f& pose, const Eigen::
         // —— 2. 为每个点添加箭头 ——
         for (size_t j = 0; j < debug_trajs_[i].size(); ++j) {
             visualization_msgs::Marker arrow;
+            float cost;
+            if (i == debug_trajs_.size() - 1 && j == debug_trajs_[i].size() - 1) {
+                cost = (cost_min + cost_max) / 2.0f;
+            } else {
+                cost = traj_cost_vec_[i][j];
+            }
+            float norm = (cost - cost_min) / (cost_max - cost_min + 1e-6f);
             arrow.header.frame_id = "world";
             arrow.header.stamp    = now;
             arrow.ns              = "traj_orient";
@@ -213,6 +225,7 @@ PlannerStatus PathOptimizer::makePlan(const Eigen::Vector3f& pose, const Eigen::
             arrow.scale.y         = 0.003;
             arrow.scale.z         = 0.005;
             arrow.color           = line.color;     // 同路径线颜色，可自行调整透明度等
+            arrow.color.a = norm;
             // 位姿：位置与点重合，方向使用预先计算的四元数
             arrow.pose.position.x    = debug_trajs_[i][j].x();
             arrow.pose.position.y    = debug_trajs_[i][j].y();
@@ -324,7 +337,8 @@ void PathOptimizer::registerG2OTypes() {
 bool PathOptimizer::graphOptimize(int iterations_inner_loop, int iterations_outer_loop) {
     /* Loop optimize */
     debug_trajs_.clear();
-    std::vector<Eigen::Vector3f> temp_traj;
+    traj_cost_vec_.clear();
+    std::vector<Eigen::Vector3d> temp_traj;
     for (int i = 0; i < iterations_outer_loop; ++i) {
         std::cout << "optimize iteration: " << i << endl;
         /* Auto resize teb */
@@ -352,10 +366,19 @@ bool PathOptimizer::graphOptimize(int iterations_inner_loop, int iterations_oute
         int iter = optimizer_->optimize(iterations_inner_loop);
         /* Debug trajs: optimize */
         temp_traj.clear();
-        for (auto& pt : teb_->poses()) {
-            temp_traj.emplace_back(pt->pose().cast<float>());
+        std::vector<float> cost_vec;
+        for (size_t j = 0; j < teb_->poses().size(); j++) {
+            VertexPose* vp = teb_->poseVertex(j);
+            temp_traj.emplace_back(vp->pose());
+            for (auto* e_base : vp->edges()) {
+                auto* e_slip = dynamic_cast<EdgeSlipWork *>(e_base);
+                if (!e_slip) continue;
+                float cost = e_slip->chi2();
+                cost_vec.emplace_back(cost);
+            }
         }
         debug_trajs_.emplace_back(temp_traj);
+        traj_cost_vec_.emplace_back(cost_vec);
         if (!iter) {
             cout << "graphOptimize optimize failed! iter:" << iter << endl;
 //            ALOGD("graphOptimize optimize failed! iter: %d", iter);
@@ -406,12 +429,46 @@ void PathOptimizer::addVertices() {
 }
 
 void PathOptimizer::addEdgesSlip() {
+//    Eigen::Matrix<double, 1, 1> inform;
+//    inform.fill(cfg_->optimize.weight_slip);
+//    int pose_size = teb_->poses().size();
+//    computeSlopeAngles(q_, params_.g, cur_pose_[2], theta_slope_, psi_s_);
+//    auto edge_slip_start = new EdgeSlipStart();
+//    edge_slip_start->setVertex(0, teb_->poseVertex(0));
+//    edge_slip_start->setVertex(1, teb_->poseVertex(1));
+//    edge_slip_start->setVertex(2, teb_->timeDiffVertex(0));
+//    edge_slip_start->setInformation(inform);
+//    edge_slip_start->setSlopeInfo(theta_slope_, psi_s_, params_);
+//    edge_slip_start->setParams(cfg_);
+//    optimizer_->addEdge(edge_slip_start);
+//    std::cout << " debug add edge slip start finish " << std::endl;
+//    for (int i = 0; i < pose_size - 2; ++i) {
+//        auto edge_slip = new EdgeSlip();
+//        edge_slip->setVertex(0, teb_->poseVertex(i));
+//        edge_slip->setVertex(1, teb_->poseVertex(i + 1));
+//        edge_slip->setVertex(2, teb_->poseVertex(i + 2));
+//        edge_slip->setVertex(3, teb_->timeDiffVertex(i));
+//        edge_slip->setVertex(4, teb_->timeDiffVertex(i + 1));
+//        edge_slip->setInformation(inform);
+//        edge_slip->setSlopeInfo(theta_slope_, psi_s_, params_);
+//        edge_slip->setParams(cfg_);
+//        optimizer_->addEdge(edge_slip);
+//    }
+//
+//    auto edge_slip_goal = new EdgeSlipGoal();
+//    edge_slip_goal->setVertex(0, teb_->poseVertex(0));
+//    edge_slip_goal->setVertex(1, teb_->poseVertex(1));
+//    edge_slip_goal->setVertex(2, teb_->timeDiffVertex(0));
+//    edge_slip_goal->setInformation(inform);
+//    edge_slip_goal->setSlopeInfo(theta_slope_, psi_s_, params_);
+//    edge_slip_goal->setParams(cfg_);
+//    optimizer_->addEdge(edge_slip_goal);
     Eigen::Matrix<double, 1, 1> inform;
     inform.fill(cfg_->optimize.weight_slip);
     int pose_size = teb_->poses().size();
     computeSlopeAngles(q_, params_.g, cur_pose_[2], theta_slope_, psi_s_);
     for (int i = 0; i < pose_size - 1; ++i) {
-        auto edge_slip = new EdgeSlip();
+        auto edge_slip = new EdgeSlipWork();
         edge_slip->setVertex(0, teb_->poseVertex(i));
         edge_slip->setVertex(1, teb_->poseVertex(i + 1));
         edge_slip->setInformation(inform);
@@ -542,21 +599,6 @@ double PathOptimizer::computeCurrentCost() {
 
     optimizer_->computeInitialGuess();
 
-    //    double total_error = 0.0f, total_obs_error = 0.0f;
-    //    for (const auto &edge:optimizer_->activeEdges()) {
-    //        auto obs_edge = dynamic_cast<EdgeObstacle*>(edge);
-    //        if (obs_edge != nullptr &&
-    //            edge->errorData()[0] > 1e-2) {
-    //            obs_edge->printPose();
-    //            cout << "  --  ";
-    //            total_obs_error += obs_edge->errorData()[0];
-    //        }
-    //        total_error += edge->errorData()[0];
-    //    }
-    //    cout << " Total error:" << total_error << endl;
-
-    //    double total_error = 0.0f, total_obs_error = 0.0f, total_vel_error = 0.0f, total_acc_error = 0.0f, total_kinematic_error = 0.0f;
-
     double max_cost = 0.0;
     //    g2o::OptimizableGraph::Edge* max_cost_edge;
     for (const auto& edge : optimizer_->activeEdges()) {
@@ -566,46 +608,8 @@ double PathOptimizer::computeCurrentCost() {
 
         if (cur_cost > max_cost) {
             max_cost = cur_cost;
-            //            max_cost_edge = edge;
         }
-        //        if (cur_cost > 1e-2) {
-        //            if (dynamic_cast<EdgeObstacle *>(edge) != nullptr) {
-        //                dynamic_cast<EdgeObstacle *>(edge)->printPose();
-        //                error_poses_.emplace_back(dynamic_cast<EdgeObstacle *>(edge)->getPose());
-        //                cout << " EdgeObstacle cost:";
-        //            } else if (dynamic_cast<EdgeVelocity *>(edge) != nullptr) {
-        //                cout << "EdgeVelocity cost:";
-        //            } else if (dynamic_cast<EdgeTimeOptimal *>(edge) != nullptr) {
-        //                cout << "EdgeTimeOptimal cost:";
-        //            } else if (dynamic_cast<EdgeKinematics *>(edge) != nullptr) {
-        //                cout << "EdgeKinematics cost:";
-        //            } else if (dynamic_cast<EdgeAcceleration *>(edge) != nullptr) {
-        //                cout << "EdgeAcceleration cost:";
-        //            } else if (dynamic_cast<EdgeAccelerationStart *>(edge) != nullptr) {
-        //                cout << "EdgeAccelerationStart cost:";
-        //            } else if (dynamic_cast<EdgeAccelerationGoal *>(edge) != nullptr) {
-        //                cout << "EdgeAccelerationGoal cost:";
-        //            }
-        //            cout << cur_cost << endl;
-        //        }
     }
-
-    //    if (dynamic_cast<EdgeObstacle *>(max_cost_edge) != nullptr) {
-    //        cout << "EdgeObstacle cost:";
-    //    } else if (dynamic_cast<EdgeVelocity *>(max_cost_edge) != nullptr) {
-    //        cout << "EdgeVelocity cost:";
-    //    } else if (dynamic_cast<EdgeTimeOptimal *>(max_cost_edge) != nullptr) {
-    //        cout << "EdgeTimeOptimal cost:";
-    //    } else if (dynamic_cast<EdgeKinematics *>(max_cost_edge) != nullptr) {
-    //        cout << "EdgeKinematics cost:";
-    //    } else if (dynamic_cast<EdgeAcceleration *>(max_cost_edge) != nullptr) {
-    //        cout << "EdgeAcceleration cost:";
-    //    } else if (dynamic_cast<EdgeAccelerationStart *>(max_cost_edge) != nullptr) {
-    //        cout << "EdgeAccelerationStart cost:";
-    //    } else if (dynamic_cast<EdgeAccelerationGoal *>(max_cost_edge) != nullptr) {
-    //        cout << "EdgeAccelerationGoal cost:";
-    //    }
-    //    cout << max_cost << " computeCurrentCost :" << cost << endl;
     return cost;
 }
 
@@ -614,7 +618,7 @@ void PathOptimizer::init(const ros::NodeHandle& nh) {
     clearGraph();
     teb_->clearVertexSequences();
     params_.mass = 20.0f;
-    params_.cgHeight = 0.25;
+    params_.cgHeight = 0.15;
     params_.g = 9.81;
     params_.rearWeightFraction = 0.7;
     params_.trackWidth = 0.48;

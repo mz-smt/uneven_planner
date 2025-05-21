@@ -516,6 +516,15 @@ namespace uneven_planner {
         pose[2] = (float)wrapToPi(query[2] - cur_pose[2]);
         return pose;
     }
+
+    inline Eigen::Vector3f bodyFrameToGroundFrame(const Eigen::Vector3f& query,
+                                                  const Eigen::Vector3f& cur_pose) {
+        Eigen::Vector3f result;
+        result.head(2) = cur_pose.head(2) + rotateVector2D(query.head(2), cur_pose[2]);
+        result[2] = (float)wrapToPi(query[2] + cur_pose[2]);
+        return result;
+    }
+
     inline int getNearestWayPoint(const std::vector<Eigen::Vector3f>& path, const Eigen::Vector3f& pose, int start_idx,
                                   int end_index, float max_dist) {
         if (path.size() == 0) {

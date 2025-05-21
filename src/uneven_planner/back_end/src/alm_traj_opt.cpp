@@ -338,7 +338,7 @@ namespace uneven_planner
                                + 0.09 * (a * (cos(next_pose.z()) - cos(cur_pose.z())) + b * (sin(next_pose.z()) - sin(cur_pose.z())));
                 auto w_grav = mass * g * delta_z;
                 auto delta_w = w_drive - w_grav;
-                auto cost = 1 / delta_w;
+                auto cost = 1 / delta_w * (std::fabs(d_r) + std::fabs(d_l)) / 2;
                 cost_vec.at(i) = cost;
                 cost_total += cost;
                 std::cout << "debug path index: " << i << " theta: " << psi_i / M_PI * 180 << " pitch: "
@@ -380,7 +380,12 @@ namespace uneven_planner
 
     void ALMTrajOpt::verifyWorkCost(std::vector<Eigen::Vector3d> &path) {
 #if VISUAL_TYPE == SAMPLE_PATH
-        path = samplePoints(odom_pos, 0.5, 30);
+//        path = samplePoints(odom_pos, 0.5, 30);
+        auto sample_path = samplePointsV2(odom_pos);
+        path.clear();
+        for (auto point : sample_path) {
+            path.emplace_back(point.x(), point.y(), point.z());
+        }
 #endif
         for (auto& point : path) {
             point[2] = wrapToPi(point[2]);
@@ -411,7 +416,7 @@ namespace uneven_planner
             computePointAttitude(theta_slope, psi_s, psi_i, pitch, roll);
             double N_l, N_r;
             computeForcesImproved(pitch, roll, N_l, N_r);
-            const double mu = 1.2f;
+            const double mu = 2.0f;
             auto F_l = mu * N_l;
             auto F_r = mu * N_r;
             float connection_angle = atan2(next_pose.y() - cur_pose.y(), next_pose.x() - cur_pose.x());
@@ -435,7 +440,10 @@ namespace uneven_planner
                     + 0.09 * (a * (cos(next_pose.z()) - cos(cur_pose.z())) + b * (sin(next_pose.z()) - sin(cur_pose.z())));
             auto w_grav = mass * g * delta_z;
             auto delta_w = w_drive - w_grav;
-            auto cost = 1 / delta_w;
+            if (delta_w < 0) {
+                delta_w = 1e-6;
+            }
+            auto cost = 1 / delta_w * (std::fabs(d_r) + std::fabs(d_l)) / 2;
             cost_vec.at(i) = cost;
             std::cout << "debug path index: " << i << " theta: " << psi_i / M_PI * 180 << " pitch: "
                 << pitch / M_PI * 180 << " roll: " << roll / M_PI * 180 << " and forces: " << N_l << "," << N_r
@@ -456,8 +464,8 @@ namespace uneven_planner
             m.id              = i;
             m.type            = visualization_msgs::Marker::CYLINDER;
             m.action          = visualization_msgs::Marker::ADD;
-            m.scale.x         = 0.1;
-            m.scale.y         = 0.1;
+            m.scale.x         = 0.05;
+            m.scale.y         = 0.05;
             m.scale.z         = height;
             m.pose.position.x = p.x();
             m.pose.position.y = p.y();
@@ -557,6 +565,45 @@ namespace uneven_planner
             pts.emplace_back(x, y, psi);
         }
         return pts;
+    }
+
+    std::vector<Eigen::Vector3f> ALMTrajOpt::samplePointsV2(const Eigen::Vector3d &center) {
+        float w_min = -1.0f;
+        float w_max = 1.0f;
+        int sample_num = 5;
+        std::vector<float> w_vec;
+        for (int i = 0; i - 1 < sample_num; i++) {
+            auto w = w_min + (w_max - w_min) / sample_num * i;
+            w_vec.emplace_back(w);
+        }
+        std::vector<double> v_vec = { +0.5, 0.25, -0.25, -0.5 };
+        std::vector<Eigen::Vector3f> body_pose_vec, result_pose_vec;
+        for (auto v : v_vec) {
+            for (auto w : w_vec) {
+                body_pose_vec.emplace_back(computeEndPoint(v, w));
+            }
+        }
+        for (const auto& body_pose : body_pose_vec) {
+            result_pose_vec.emplace_back(bodyFrameToGroundFrame(body_pose, Eigen::Vector3f(center.x(), center.y(), center.z())));
+        }
+        return result_pose_vec;
+    }
+
+    Eigen::Vector3f ALMTrajOpt::computeEndPoint(const double &v, const double &w, double t) {
+        Eigen::Vector3f p;
+        if (std::fabs(w) < 1e-6) {
+            // 直线模型
+            p.x()     = v * t;
+            p.y()     = 0.0;
+            p.z()     = w * t;  // 仍然加上角度变化
+        } else {
+            // 圆弧模型
+            double R = v / w;
+            p.x()     = R * std::sin(w * t);
+            p.y()     = -R * (std::cos(w * t) - 1.0);
+            p.z() = w * t;
+        }
+        return p;
     }
 
     static double innerCallback(void* ptrObj, const Eigen::VectorXd& x, Eigen::VectorXd& grad)
