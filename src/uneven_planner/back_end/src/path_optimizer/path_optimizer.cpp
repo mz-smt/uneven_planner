@@ -224,8 +224,9 @@ PlannerStatus PathOptimizer::makePlan(const Eigen::Vector3f& pose, const Eigen::
             arrow.scale.x         = 0.03;
             arrow.scale.y         = 0.003;
             arrow.scale.z         = 0.005;
-            arrow.color           = line.color;     // 同路径线颜色，可自行调整透明度等
-            arrow.color.a = norm;
+            std_msgs::ColorRGBA col = hsvToRgba((1.0f - norm) * 240.0f/360.0f, 1.0f, 1.0f, 0.8f);
+            arrow.color           = col;     // 同路径线颜色，可自行调整透明度等
+//            arrow.color.a = norm;
             // 位姿：位置与点重合，方向使用预先计算的四元数
             arrow.pose.position.x    = debug_trajs_[i][j].x();
             arrow.pose.position.y    = debug_trajs_[i][j].y();
@@ -376,6 +377,26 @@ bool PathOptimizer::graphOptimize(int iterations_inner_loop, int iterations_oute
                 float cost = e_slip->chi2();
                 cost_vec.emplace_back(cost);
             }
+//            for (auto* e_base : vp->edges()) {
+//                auto* e_slip = dynamic_cast<EdgeSlip *>(e_base);
+//                if (e_slip) {
+//                    float cost = e_slip->chi2();
+//                    cost_vec.emplace_back(cost);
+//                    continue;
+//                }
+//                auto* e_slip_start = dynamic_cast<EdgeSlipStart *>(e_base);
+//                if (e_slip_start) {
+//                    float cost = e_slip_start->chi2();
+//                    cost_vec.emplace_back(cost);
+//                    continue;
+//                }
+//                auto* e_slip_goal = dynamic_cast<EdgeSlipGoal *>(e_base);
+//                if (e_slip_goal) {
+//                    float cost = e_slip_goal->chi2();
+//                    cost_vec.emplace_back(cost);
+//                    continue;
+//                }
+//            }
         }
         debug_trajs_.emplace_back(temp_traj);
         traj_cost_vec_.emplace_back(cost_vec);

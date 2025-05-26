@@ -58,12 +58,17 @@ namespace ninebot_algo::motion_planner {
             auto w_grav = param_.mass * param_.g * delta_z;
             auto delta_w = w_drive - w_grav;
             auto cost = 1 / delta_w * (std::fabs(d_r) + std::fabs(d_l)) / 2;
+            bool add_penalty = false;
+            if ((F_r > F_l && std::fabs(d_r) < std::fabs(d_l)) || (F_r < F_l && std::fabs(d_r) > std::fabs(d_l))) {
+                add_penalty = true;
+//                cost += 0.0005;
+            }
             std::cout << "debug path current pose: " << cur_pose[0] << " " << cur_pose[1] << " " << cur_pose[2] / M_PI * 180
                       << " next pose: " << next_pose[0] << " " << next_pose[1] << " " << next_pose[2] / M_PI * 180
                       << " pitch: " << pitch / M_PI * 180 << " roll: " << roll / M_PI * 180 << " and forces: " << N_l
                       << "," << N_r << " force: " << F_l << " " << F_r << " dist: " << d_l << " " << d_r
                       << " forward: " << forward << " work drive: " << w_drive << " delta z: " << delta_z
-                      << " work grav: " << w_grav << " cost: " << cost << std::endl;
+                      << " work grav: " << w_grav << " cost: " << cost << " add penalty:" << add_penalty << std::endl;
             _error[0] = cost;
         }
 
@@ -95,10 +100,10 @@ namespace ninebot_algo::motion_planner {
             // 载荷转移：
             // 纵向载荷转移（由俯仰角引起）
             double deltaN_long =
-                    - (params.mass * params.g * sin(pitch) * params.cgHeight) / params.wheelbase;
+                    - (params.mass * params.g * sin(pitch) * params.cgHeight) / params.trackWidth;
             // 横向载荷转移（由横滚角引起）
             double deltaN_roll =
-                    (params.mass * params.g * sin(roll) * params.cgHeight) / params.trackWidth;
+                    (params.mass * params.g * sin(roll) * params.cgHeight) / params.wheelbase;
             // 侧向加速度引起的载荷转移
             double deltaN_total = deltaN_roll;
 
@@ -220,10 +225,10 @@ namespace ninebot_algo::motion_planner {
             // 载荷转移：
             // 纵向载荷转移（由俯仰角引起）
             double deltaN_long =
-                    - (params.mass * params.g * sin(pitch) * params.cgHeight) / params.wheelbase;
+                    - (params.mass * params.g * sin(pitch) * params.cgHeight) / params.trackWidth;
             // 横向载荷转移（由横滚角引起）
             double deltaN_roll =
-                    (params.mass * params.g * sin(roll) * params.cgHeight) / params.trackWidth;
+                    (params.mass * params.g * sin(roll) * params.cgHeight) / params.wheelbase;
             // 侧向加速度引起的载荷转移
             double deltaN_total = deltaN_roll;
 
@@ -338,10 +343,10 @@ namespace ninebot_algo::motion_planner {
             // 载荷转移：
             // 纵向载荷转移（由俯仰角引起）
             double deltaN_long =
-                    - (params.mass * params.g * sin(pitch) * params.cgHeight) / params.wheelbase;
+                    - (params.mass * params.g * sin(pitch) * params.cgHeight) / params.trackWidth;
             // 横向载荷转移（由横滚角引起）
             double deltaN_roll =
-                    (params.mass * params.g * sin(roll) * params.cgHeight) / params.trackWidth;
+                    (params.mass * params.g * sin(roll) * params.cgHeight) / params.wheelbase;
             // 侧向加速度引起的载荷转移
             double deltaN_total = deltaN_roll;
 
@@ -469,10 +474,10 @@ namespace ninebot_algo::motion_planner {
             // 载荷转移：
             // 纵向载荷转移（由俯仰角引起）
             double deltaN_long =
-                    - (params.mass * params.g * sin(pitch) * params.cgHeight) / params.wheelbase;
+                    - (params.mass * params.g * sin(pitch) * params.cgHeight) / params.trackWidth;
             // 横向载荷转移（由横滚角引起）
             double deltaN_roll =
-                    (params.mass * params.g * sin(roll) * params.cgHeight) / params.trackWidth;
+                    (params.mass * params.g * sin(roll) * params.cgHeight) / params.wheelbase;
             // 侧向加速度引起的载荷转移
             double deltaN_total = deltaN_roll;
 
