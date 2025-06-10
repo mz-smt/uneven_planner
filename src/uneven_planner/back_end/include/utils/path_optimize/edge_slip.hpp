@@ -58,16 +58,16 @@ namespace ninebot_algo::motion_planner {
             float weight_roll = 0.5f;
             if (roll > 0) {
                 if (forward != turn_left) {
-                    weight_roll = 5.0f;
+                    weight_roll = 2.0f;
                 }
             } else {
                 if (forward == turn_left) {
-                    weight_roll = 5.0f;
+                    weight_roll = 2.0f;
                 }
             }
             auto weight_back = 1.0f;
             if (pitch > 3.0 / 180 * M_PI && !forward) {
-                weight_back = 30.0f;
+                weight_back = 10.0f;
                 weight_roll = std::max(weight_roll, 1.0f);
             }
             auto F_l = mu * N_l;
@@ -75,24 +75,28 @@ namespace ninebot_algo::motion_planner {
             auto d = 0.1;
             auto t_g_d = R * cos(delta_slope_heading) - d * sin(delta_slope_heading) * weight_turn;
             auto T_g = weight_dir * param_.mass * param_.g * sin(theta_slope_) * t_g_d;
-            float wheel_torque = 0.0f;
+            float dist_r, dist_l;
             if (forward == turn_left) {
-                wheel_torque = F_r * (R + param_.wheelbase / 2.0f) + F_l * (R - param_.wheelbase / 2.0f);
+                dist_r = R + param_.wheelbase / 2.0f;
+                dist_l = R - param_.wheelbase / 2.0f;
             } else {
-                wheel_torque = F_l * (R + param_.wheelbase / 2.0f) + F_r * (R - param_.wheelbase / 2.0f);
+                dist_r = R - param_.wheelbase / 2.0f;
+                dist_l = R + param_.wheelbase / 2.0f;
             }
+            auto wheel_torque = F_r * dist_r + F_l * dist_l;
             auto t = std::fabs(wheel_torque) - T_g;
             if (t < 0) {
                 t = 0.1;
             }
+            auto diff = std::fabs(F_r / F_l - std::fabs(dist_r / dist_l)) * 0.01;
             auto cost = 1.0 / t * weight_back * weight_roll;
             std::cout << "debug path current pose: " << cur_pose[0] << " " << cur_pose[1] << " " << cur_pose[2] / M_PI * 180
                       << " next pose: " << next_pose[0] << " " << next_pose[1] << " " << next_pose[2] / M_PI * 180 << " "
                       << psi_i / M_PI * 180 << " pitch: " << pitch / M_PI * 180 << " roll: " << roll / M_PI * 180
                       << " and N-forces: " << N_l << "," << N_r << " force: " << F_l << "," << F_r << " dist: "
-                      << (R + param_.wheelbase / 2.0f) << "," << (R - param_.wheelbase / 2.0f) << " wheel torque: "
-                      << wheel_torque << " torque: " << T_g << " direction: " << forward << " " << turn_left << " R:"
-                      << R << " weight back:" << weight_back << " weight roll: " << weight_roll << " cost: " << cost << std::endl;
+                      << dist_l << "," << dist_r << " wheel torque: " << wheel_torque << " torque: " << T_g
+                      << " direction: " << forward << " " << turn_left << " R:" << R << " weight back:" << weight_back
+                      << " weight roll:" << weight_roll << " weight diff: " << diff  << " cost: " << cost << std::endl;
             _error[0] = cost;
         }
 
@@ -112,7 +116,7 @@ namespace ninebot_algo::motion_planner {
             if (!iNotFixed && !jNotFixed)
                 return;
 
-            const number_t delta = g2o::cst(0.1);
+            const number_t delta = g2o::cst(1e-2);
             const number_t scalar = 1 / (2*delta);
             ErrorVector errorBak;
             ErrorVector errorBeforeNumeric = _error;
