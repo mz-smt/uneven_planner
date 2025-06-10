@@ -5,6 +5,7 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /odom1/Shape1
+        - /front_end1
       Splitter Ratio: 0.5
     Tree Height: 839
   - Class: rviz/Selection
@@ -437,6 +438,22 @@ Visualization Manager:
       Topic: /simple_path/result_path
       Unreliable: false
       Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /teb/debug_path
+      Name: TebPaths
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /teb/path_cost
+      Name: TebPathCost
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path
@@ -447,63 +464,7 @@ Visualization Manager:
       Length: 0.30000001192092896
       Line Style: Lines
       Line Width: 0.029999999329447746
-      Name: STOMP
-      Offset:
-        X: 0
-        Y: 0
-        Z: 0
-      Pose Color: 255; 85; 255
-      Pose Style: Arrows
-      Queue Size: 10
-      Radius: 0.029999999329447746
-      Shaft Diameter: 0.003000000026077032
-      Shaft Length: 0.029999999329447746
-      Topic: /stomp/result_path
-      Unreliable: false
-      Value: true
-    - Alpha: 1
-      Axes Length: 1
-      Axes Radius: 0.10000000149011612
-      Class: rviz/Pose
-      Color: 255; 25; 0
-      Enabled: true
-      Head Length: 0.003000000026077032
-      Head Radius: 0.009999999776482582
-      Name: Pose
-      Queue Size: 10
-      Shaft Length: 0.029999999329447746
-      Shaft Radius: 0.009999999776482582
-      Shape: Arrow
-      Topic: /pso/optimize_point
-      Unreliable: false
-      Value: true
-    - Class: rviz/MarkerArray
-      Enabled: true
-      Marker Topic: /manager_node/sample_path
-      Name: MarkerArray
-      Namespaces:
-        {}
-      Queue Size: 100
-      Value: true
-    - Class: rviz/MarkerArray
-      Enabled: true
-      Marker Topic: /teb/debug_path
-      Name: teb_debug_path
-      Namespaces:
-        {}
-      Queue Size: 100
-      Value: true
-    - Alpha: 1
-      Buffer Length: 1
-      Class: rviz/Path
-      Color: 25; 255; 0
-      Enabled: true
-      Head Diameter: 0.009999999776482582
-      Head Length: 0.009999999776482582
-      Length: 0.30000001192092896
-      Line Style: Lines
-      Line Width: 0.029999999329447746
-      Name: teb_result
+      Name: TebResult
       Offset:
         X: 0
         Y: 0
@@ -545,7 +506,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 13.169903755187988
+      Distance: 5.306977272033691
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -553,17 +514,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: -0.4874895215034485
-        Y: 0.07598388940095901
-        Z: 0.1482117772102356
+        X: -1.9307740926742554
+        Y: 0.0322442390024662
+        Z: -1.2464332580566406
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.5647963285446167
+      Pitch: 1.5697963237762451
       Target Frame: <Fixed Frame>
-      Yaw: 3.1398606300354004
+      Yaw: 3.1448616981506348
     Saved: ~
 Window Geometry:
   Displays:

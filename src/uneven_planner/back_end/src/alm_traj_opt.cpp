@@ -299,8 +299,6 @@ namespace uneven_planner
                 point[2] = wrapToPi(point[2]);
             }
             double pitch, roll;
-            std::vector<float> cost_vec;
-            cost_vec.resize(path.size(), 0.0f);
             for (size_t i = 0; i < path.size() - 1; i++) {
                 auto cur_pose = path.at(i);
                 auto next_pose = path.at(i + 1);
@@ -309,42 +307,46 @@ namespace uneven_planner
                 std::cout << "debug current: " << cur_pose[0] << " " << cur_pose[1] << " " << cur_pose[2] / M_PI * 180
                           << " to next point: " << next_pose[0] << " " << next_pose[1] << " " << next_pose[2] / M_PI * 180
                           << " path dist: " << length << " theta diff: " << delta_theta << std::endl;
+                if (length < 1e-6 && std::fabs(delta_theta) < 1e-6) {
+                    continue;
+                }
                 double psi_i = cur_pose[2];
                 computePointAttitude(theta_slope, psi_s, psi_i, pitch, roll);
                 double N_l, N_r;
                 computeForcesImproved(pitch, roll, N_l, N_r);
-                const double mu = 1.2f;
-                auto F_l = mu * N_l;
-                auto F_r = mu * N_r;
-                Eigen::Vector3f pose_diff = next_pose - cur_pose;
-                float connection_angle = atan2(pose_diff.y(), pose_diff.x());
+                float connection_angle = atan2(next_pose.y() - cur_pose.y(), next_pose.x() - cur_pose.x());
                 float rotate_sum = abs(wrapToPi(connection_angle - cur_pose[2]))
                                    + abs(wrapToPi(next_pose[2] - connection_angle));
                 auto forward = true;
                 if (rotate_sum > M_PI) {
                     forward = false;
                 }
-                auto dir = forward ? 1 : -1;
-                auto d_r = dir * length + wheel_dist / 2 * delta_theta;
-                auto d_l = dir * length - wheel_dist / 2 * delta_theta;
-                if (length < 1e-6 && std::fabs(delta_theta) < 1e-6) {
-                    cost_vec.at(i) = 0;
-                    continue;
+                auto weight_dir = forward ? 1.0f : -1.0f;
+                auto turn_left = delta_theta > 0;
+                auto weight_turn = turn_left ? 1.0f : -1.0f;
+                auto delta_slope_heading = wrapToPi(psi_i - psi_s);
+                auto R = std::fabs(length / (2 * sin(delta_theta / 2.0f)));
+                const double mu = 0.8f;
+                auto F_l = mu * N_l;
+                auto F_r = mu * N_r;
+                auto t = 0.0f;
+                auto d = 0.1f;
+                auto t_g_d = R * cos(delta_slope_heading) - d * sin(delta_slope_heading) * weight_turn;
+                auto T_g = weight_dir * mass * g * sin(theta_slope) * t_g_d;
+                if (forward == turn_left) {
+                    t = F_r * (R + wheel_dist / 2.0f) + F_l * (R - wheel_dist / 2.0f) - T_g;
+                } else {
+                    t = F_l * (R + wheel_dist / 2.0f) + F_r * (R - wheel_dist / 2.0f) - T_g;
                 }
-                auto w_drive = F_l * std::fabs(d_l) + F_r * std::fabs(d_r);
-                auto a = tan(theta_slope) * cos(psi_s);
-                auto b = tan(theta_slope) * sin(psi_s);
-                auto delta_z = a * (next_pose.x() - cur_pose.x()) + b * (next_pose.y() - cur_pose.y())
-                               + 0.09 * (a * (cos(next_pose.z()) - cos(cur_pose.z())) + b * (sin(next_pose.z()) - sin(cur_pose.z())));
-                auto w_grav = mass * g * delta_z;
-                auto delta_w = w_drive - w_grav;
-                auto cost = 1 / delta_w * (std::fabs(d_r) + std::fabs(d_l)) / 2;
-                cost_vec.at(i) = cost;
+                if (t < 0) {
+                    t = 0.1;
+                }
+                auto cost = 1.0 / t;
                 cost_total += cost;
                 std::cout << "debug path index: " << i << " theta: " << psi_i / M_PI * 180 << " pitch: "
-                          << pitch / M_PI * 180 << " roll: " << roll / M_PI * 180 << " and forces: " << N_l << "," << N_r
-                          << " force: " << F_l << " " << F_r << " dist: " << d_l << " " << d_r << " forward: " << forward << " work drive: " << w_drive
-                          << " delta z: " << delta_z << " work grav: " << w_grav << " cost: " << cost << std::endl;
+                          << pitch / M_PI * 180 << " roll: " << roll / M_PI * 180 << " radius: " << R <<  " and forces: " << N_l
+                          << "," << N_r << " direction: " << forward << " " << turn_left << " force: " << F_l << " " << F_r
+                          << " torque: " << T_g << " cost: " << cost << std::endl;
             }
             std::cout << "debug current path cost total: " << cost_total << std::endl;
             cost_total_vec.emplace_back(cost_total);
@@ -354,7 +356,7 @@ namespace uneven_planner
 
         for (size_t i = 0; i < path_vec.size(); i++) {
             auto p = path_vec.at(i).at((path_vec.at(i).size() - 1) / 2);
-            auto height = cost_total_vec.at(i) * 10;
+            auto height = cost_total_vec.at(i) * 100;
             visualization_msgs::Marker m;
             m.header.frame_id = "world";
             m.header.stamp    = ros::Time::now();
@@ -398,6 +400,7 @@ namespace uneven_planner
         double pitch, roll;
         std::vector<float> cost_vec;
         cost_vec.resize(path.size(), 0.0f);
+        auto cost_weight = 100.0f;
 #if VISUAL_TYPE == A_STAR_PATH
         for (size_t i = 0; i < path.size() - 1; i++) {
             auto cur_pose = path.at(i);
@@ -412,13 +415,14 @@ namespace uneven_planner
             std::cout << "debug current: " << cur_pose[0] << " " << cur_pose[1] << " " << cur_pose[2] / M_PI * 180
                 << " to next point: " << next_pose[0] << " " << next_pose[1] << " " << next_pose[2] / M_PI * 180
                 << " path dist: " << length << " theta diff: " << delta_theta << std::endl;
+            if (length < 1e-6 && std::fabs(delta_theta) < 1e-6) {
+                cost_vec.at(i) = 0;
+                continue;
+            }
             double psi_i = cur_pose[2];
             computePointAttitude(theta_slope, psi_s, psi_i, pitch, roll);
             double N_l, N_r;
             computeForcesImproved(pitch, roll, N_l, N_r);
-            const double mu = 2.0f;
-            auto F_l = mu * N_l;
-            auto F_r = mu * N_r;
             float connection_angle = atan2(next_pose.y() - cur_pose.y(), next_pose.x() - cur_pose.x());
             float rotate_sum = abs(wrapToPi(connection_angle - cur_pose[2]))
                                + abs(wrapToPi(next_pose[2] - connection_angle));
@@ -426,29 +430,100 @@ namespace uneven_planner
             if (rotate_sum > M_PI) {
                 forward = false;
             }
-            auto dir = forward ? 1 : -1;
-            auto d_r = dir * length + wheel_dist / 2 * delta_theta;
-            auto d_l = dir * length - wheel_dist / 2 * delta_theta;
-            if (length < 1e-6 && std::fabs(delta_theta) < 1e-6) {
-                cost_vec.at(i) = 0;
+            auto weight_dir = forward ? 1.0f : -1.0f;
+            auto turn_left = delta_theta > 0;
+            auto weight_turn = turn_left ? 1.0f : -1.0f;
+            auto delta_slope_heading = wrapToPi(psi_i - psi_s);
+            float R = 0.0f;
+            if (std::fabs(delta_theta) < 1e-6) {
+                R = 10.0f;
+            } else {
+                R = std::fabs(length / (2 * sin(delta_theta / 2.0f)));
+            }
+            R = std::min(R, 10.0f);
+#if OPTIMIZE_TYPE == TORQUE_DIFF
+            float weight_roll = 1.0f;
+            if (roll > 0) {
+                if (forward != turn_left) {
+                    weight_roll = 2.0f;
+                }
+            } else {
+                if (forward == turn_left) {
+                    weight_roll = 2.0f;
+                }
+            }
+            const double mu = 0.8f;
+            auto F_l = mu * N_l;
+            auto F_r = mu * N_r;
+            auto d = 0.1f;
+            auto t_g_d = R * cos(delta_slope_heading) - d * sin(delta_slope_heading) * weight_turn;
+            auto T_g = weight_dir * mass * g * sin(theta_slope) * t_g_d;
+            float wheel_torque = 0.0f;
+            if (forward == turn_left) {
+                wheel_torque = F_r * (R + wheel_dist / 2.0f) + F_l * (R - wheel_dist / 2.0f);
+            } else {
+                wheel_torque = F_l * (R + wheel_dist / 2.0f) + F_r * (R - wheel_dist / 2.0f);
+            }
+            auto t = std::fabs(wheel_torque) - T_g;
+            if (t < 0) {
+                t = 0.1;
+            }
+            auto weight_back = 1.0f;
+            if ((pitch > 3.0 / 180 * M_PI) && (!forward)) {
+                weight_back = 10.0f;
+            }
+            auto cost = 1.0 / t * weight_back * weight_roll;
+            cost_vec.at(i) = cost;
+            std::cout << "debug path current pose: " << cur_pose[0] << " " << cur_pose[1] << " " << cur_pose[2] / M_PI * 180
+                      << " next pose: " << next_pose[0] << " " << next_pose[1] << " " << next_pose[2] / M_PI * 180 << " "
+                      << psi_i / M_PI * 180 << " pitch: " << pitch / M_PI * 180 << " roll: " << roll / M_PI * 180
+                      << " and N-forces: " << N_l << "," << N_r << " force: " << F_l << "," << F_r << " dist: "
+                      << (R + wheel_dist / 2.0f) << "," << (R - wheel_dist / 2.0f) << " wheel torque: " << wheel_torque
+                      << " torque: " << T_g << " direction: " << forward << " " << turn_left << " R:" << R
+                      << " weight roll: " << weight_roll << " weight back:" << weight_back << " cost: " << cost << std::endl;
+#elif OPTIMIZE_TYPE == MU_COST
+            cost_weight = 3.0f;
+            auto weight_s = 0.05f;
+            auto F_g = weight_dir * mass * g * sin(theta_slope) * cos(delta_slope_heading);
+            auto F_s = weight_s * mass * g * cos(theta_slope);
+            auto F_total = F_g + F_s;
+            std::cout << "debug force: " << F_total << "," << F_g << "," << F_s << std::endl;
+            auto F_r = F_total / 2.0f;
+            auto F_l = F_total / 2.0f;
+            auto mu_l = std::fabs(F_l) / N_l;
+            auto mu_r = std::fabs(F_r) / N_r;
+            auto cost = std::max(mu_l, mu_r);
+            if (std::fabs(delta_theta) < 1e-6 || length < 1e-6) {
+                cost_vec.at(i) = cost;
                 continue;
             }
-            auto w_drive = F_l * std::fabs(d_l) + F_r * std::fabs(d_r);
-            auto a = tan(theta_slope) * cos(psi_s);
-            auto b = tan(theta_slope) * sin(psi_s);
-            auto delta_z = a * (next_pose.x() - cur_pose.x()) + b * (next_pose.y() - cur_pose.y())
-                    + 0.09 * (a * (cos(next_pose.z()) - cos(cur_pose.z())) + b * (sin(next_pose.z()) - sin(cur_pose.z())));
-            auto w_grav = mass * g * delta_z;
-            auto delta_w = w_drive - w_grav;
-            if (delta_w < 0) {
-                delta_w = 1e-6;
+            auto weight_diff = forward == turn_left ? 1.0f : -1.0f;
+            auto d = 0.09f;
+            auto t_g_d = R * cos(delta_slope_heading) - d * sin(delta_slope_heading) * weight_turn;
+            auto T_g = weight_dir * mass * g * sin(theta_slope) * t_g_d;
+            auto T_s = weight_s * mass * g * cos(theta_slope) * R;
+            auto T_diff = weight_s * (N_r - N_l) * wheel_dist / 2.0f * weight_diff;
+            auto delta_T = 1.0f;
+            auto T_total = T_g + T_s + T_diff + delta_T / R;
+            std::cout << "debug torque: " << T_total << "," << T_g << "," << T_s << "," << T_diff << "," << delta_T / R << std::endl;
+            if (forward == turn_left) {
+                F_r = (T_total - F_total * (R - wheel_dist / 2.0f)) / wheel_dist;
+                F_l = F_total - F_r;
+            } else {
+                F_l = (T_total - F_total * (R - wheel_dist / 2.0f)) / wheel_dist;
+                F_r = F_total - F_l;
             }
-            auto cost = 1 / delta_w * (std::fabs(d_r) + std::fabs(d_l)) / 2;
+            mu_l = std::fabs(F_l) / N_l;
+            mu_r = std::fabs(F_r) / N_r;
+            cost = std::max(mu_l, mu_r);
             cost_vec.at(i) = cost;
-            std::cout << "debug path index: " << i << " theta: " << psi_i / M_PI * 180 << " pitch: "
-                << pitch / M_PI * 180 << " roll: " << roll / M_PI * 180 << " and forces: " << N_l << "," << N_r
-                << " force: " << F_l << " " << F_r << " dist: " << d_l << " " << d_r << " forward: " << forward << " work drive: " << w_drive
-                << " delta z: " << delta_z << " work grav: " << w_grav << " cost: " << cost << std::endl;
+            std::cout << "debug path index: " << i << " theta: " << psi_i / M_PI * 180 << "delta slope theta:"
+                << delta_slope_heading / M_PI * 180 << " pitch: " << pitch / M_PI * 180 << " roll: "
+                << roll / M_PI * 180 << " radius: " << R <<  " and forces: " << N_l << "," << N_r << " direction: "
+                << forward << " " << turn_left << " F_total: " << F_total << " T total:" << T_total << " t_g_d: "
+                << t_g_d << " t_g:" << T_g << " force: " << F_l << " " << F_r << " mu: " << mu_l << " " << mu_r
+                << " cost: " << cost << std::endl;
+#endif
         }
 
         visualization_msgs::MarkerArray arr;
@@ -456,7 +531,7 @@ namespace uneven_planner
 
         for (size_t i = 0; i < path.size(); i++) {
             auto p = path.at(i);
-            auto height = cost_vec.at(i) * 100;
+            auto height = cost_vec.at(i) * cost_weight;
             visualization_msgs::Marker m;
             m.header.frame_id = "world";
             m.header.stamp    = ros::Time::now();
@@ -529,10 +604,10 @@ namespace uneven_planner
         // 载荷转移：
         // 纵向载荷转移（由俯仰角引起）
         double deltaN_long =
-                - (mass * g * sin(pitch) * cg_height) / wheel_dist;
+                - (mass * g * sin(pitch) * cos(roll) * cg_height) / track_width / 2.0f;
         // 横向载荷转移（由横滚角引起）
         double deltaN_roll =
-                (mass * g * sin(roll) * cg_height) / track_width;
+                (mass * g * sin(roll) * cos(pitch) * cg_height) / wheel_dist;
         // 侧向加速度引起的载荷转移
         double deltaN_total = deltaN_roll;
 
@@ -583,6 +658,9 @@ namespace uneven_planner
                 body_pose_vec.emplace_back(computeEndPoint(v, w));
             }
         }
+        body_pose_vec.emplace_back(computeEndPoint(0, 0.5));
+        body_pose_vec.emplace_back(computeEndPoint(0.1, 0.0f));
+        body_pose_vec.emplace_back(computeEndPoint(-0.1, 0.0f));
         for (const auto& body_pose : body_pose_vec) {
             result_pose_vec.emplace_back(bodyFrameToGroundFrame(body_pose, Eigen::Vector3f(center.x(), center.y(), center.z())));
         }

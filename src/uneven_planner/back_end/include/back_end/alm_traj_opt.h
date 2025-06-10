@@ -15,6 +15,10 @@
 #define A_STAR_PATH 0
 #define SAMPLE_PATH 1
 
+#define OPTIMIZE_TYPE TORQUE_DIFF
+#define TORQUE_DIFF 0
+#define MU_COST 1
+
 namespace uneven_planner
 {
     constexpr double delta_sigl = 0.01;

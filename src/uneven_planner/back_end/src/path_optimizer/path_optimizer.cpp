@@ -183,11 +183,11 @@ PlannerStatus PathOptimizer::makePlan(const Eigen::Vector3f& pose, const Eigen::
     visualization_msgs::MarkerArray arr;
     ros::Time now = ros::Time::now();
     float cost_min = 1e9, cost_max = -1e9;
+    for (size_t j = 0; j < debug_trajs_.back().size(); ++j) {
+        cost_min = std::min(cost_min, traj_cost_vec_.back()[j]);
+        cost_max = std::max(cost_max, traj_cost_vec_.back()[j]);
+    }
     for (size_t i = 0; i < debug_trajs_.size(); i++) {
-        for (size_t j = 0; j < debug_trajs_[i].size(); ++j) {
-            cost_min = std::min(cost_min, traj_cost_vec_[i][j]);
-            cost_max = std::max(cost_max, traj_cost_vec_[i][j]);
-        }
         visualization_msgs::Marker line;
         line.header.frame_id = "world";
         line.header.stamp    = now;
@@ -203,37 +203,6 @@ PlannerStatus PathOptimizer::makePlan(const Eigen::Vector3f& pose, const Eigen::
             line.points.push_back(pt);
         }
         arr.markers.push_back(line);
-
-        // —— 2. 为每个点添加箭头 ——
-        for (size_t j = 0; j < debug_trajs_[i].size(); ++j) {
-            visualization_msgs::Marker arrow;
-            float cost;
-            if (i == debug_trajs_.size() - 1 && j == debug_trajs_[i].size() - 1) {
-                cost = (cost_min + cost_max) / 2.0f;
-            } else {
-                cost = traj_cost_vec_[i][j];
-            }
-            float norm = (cost - cost_min) / (cost_max - cost_min + 1e-6f);
-            arrow.header.frame_id = "world";
-            arrow.header.stamp    = now;
-            arrow.ns              = "traj_orient";
-            arrow.id              = i * 1000 + j;  // 保证与 LINE_STRIP 不冲突 :contentReference[oaicite:7]{index=7}
-            arrow.type            = visualization_msgs::Marker::ARROW;
-            arrow.action          = visualization_msgs::Marker::ADD;
-            // 尺寸：x=杆长，y=杆粗，z=头部粗
-            arrow.scale.x         = 0.03;
-            arrow.scale.y         = 0.003;
-            arrow.scale.z         = 0.005;
-            std_msgs::ColorRGBA col = hsvToRgba((1.0f - norm) * 240.0f/360.0f, 1.0f, 1.0f, 0.8f);
-            arrow.color           = col;     // 同路径线颜色，可自行调整透明度等
-//            arrow.color.a = norm;
-            // 位姿：位置与点重合，方向使用预先计算的四元数
-            arrow.pose.position.x    = debug_trajs_[i][j].x();
-            arrow.pose.position.y    = debug_trajs_[i][j].y();
-            arrow.pose.position.z    = 0.0;
-            arrow.pose.orientation   = tf::createQuaternionMsgFromYaw(debug_trajs_[i][j].z());
-            arr.markers.push_back(arrow);
-        }
     }
     teb_debug_pub_.publish(arr);
 
@@ -242,6 +211,43 @@ PlannerStatus PathOptimizer::makePlan(const Eigen::Vector3f& pose, const Eigen::
 //        ALOGD("PathOptimizer::plan() TEB poses size < 3!");
         return PlannerStatus::Error;
     }
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "world";
+    marker.header.stamp = ros::Time::now();
+    marker.ns = "trajectory";
+    marker.id = 0;
+    marker.type = visualization_msgs::Marker::LINE_STRIP;
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.scale.x = 0.05; // 线宽
+    auto path_result = debug_trajs_.back();
+    for (size_t i = 0; i < path_result.size() - 1; i++) {
+        geometry_msgs::Point p1;
+        geometry_msgs::Point p2;
+        p1.x = path_result.at(i).x();
+        p1.y = path_result.at(i).y();
+        p1.z = -0.1f;
+        p2.x = path_result.at(i+1).x();
+        p2.y = path_result.at(i+1).y();
+        p2.z = -0.1f;
+        auto cost = traj_cost_vec_.back().at(i);
+
+        marker.points.push_back(p1);
+        marker.points.push_back(p2);
+
+        float norm = (cost - cost_min) / (cost_max - cost_min + 1e-6f);
+        std::cout << "debug cost: " << cost << ", " << cost_min << "," << cost_max << "," << " norm:" << norm << std::endl;
+//        std_msgs::ColorRGBA col = hsvToRgba((1.0f - norm) * 240.0f/360.0f, 1.0f, 1.0f, 0.8f);
+        std_msgs::ColorRGBA color;
+        color.r = norm;
+        color.g = 1 - color.r;
+        color.b = 0.0f;
+        color.a = 1.0f;
+
+        // 每段线的两个端点都要添加颜色
+        marker.colors.push_back(color);
+        marker.colors.push_back(color);
+    }
+    teb_cost_pub_.publish(marker);
     nav_msgs::Path result_path;
     result_path.header.frame_id = "world";
     result_path.header.stamp = ros::Time::now();
@@ -367,39 +373,28 @@ bool PathOptimizer::graphOptimize(int iterations_inner_loop, int iterations_oute
         int iter = optimizer_->optimize(iterations_inner_loop);
         /* Debug trajs: optimize */
         temp_traj.clear();
-        std::vector<float> cost_vec;
-        for (size_t j = 0; j < teb_->poses().size(); j++) {
-            VertexPose* vp = teb_->poseVertex(j);
-            temp_traj.emplace_back(vp->pose());
-            for (auto* e_base : vp->edges()) {
-                auto* e_slip = dynamic_cast<EdgeSlipWork *>(e_base);
-                if (!e_slip) continue;
-                float cost = e_slip->chi2();
-                cost_vec.emplace_back(cost);
+        std::unordered_map<VertexPose*, int> pose2idx;
+        pose2idx.reserve(teb_->poses().size());
+        for (int j = 0; j < (int)teb_->poses().size(); ++j) {
+            pose2idx[ teb_->poseVertex(j) ] = j;
+            temp_traj.emplace_back(teb_->poses().at(j)->pose());
+        }
+        std::vector<float> pose_cost_vec(teb_->poses().size(), 0.0);
+        for (auto* edge : optimizer_->activeEdges()) {
+            if (dynamic_cast<EdgeSlipWork *>(edge) == nullptr) {
+                continue;
             }
-//            for (auto* e_base : vp->edges()) {
-//                auto* e_slip = dynamic_cast<EdgeSlip *>(e_base);
-//                if (e_slip) {
-//                    float cost = e_slip->chi2();
-//                    cost_vec.emplace_back(cost);
-//                    continue;
-//                }
-//                auto* e_slip_start = dynamic_cast<EdgeSlipStart *>(e_base);
-//                if (e_slip_start) {
-//                    float cost = e_slip_start->chi2();
-//                    cost_vec.emplace_back(cost);
-//                    continue;
-//                }
-//                auto* e_slip_goal = dynamic_cast<EdgeSlipGoal *>(e_base);
-//                if (e_slip_goal) {
-//                    float cost = e_slip_goal->chi2();
-//                    cost_vec.emplace_back(cost);
-//                    continue;
-//                }
-//            }
+            double c = edge->chi2();
+            auto v = edge->vertex(0);
+            // 只对 VertexPose 类型进行累加
+            if (auto* vp = dynamic_cast<VertexPose*>(v)) {
+                // 通过 pose2idx 快速得到它在 allPoses 中的索引
+                int idx = pose2idx[vp];
+                pose_cost_vec[idx] = c;
+            }
         }
         debug_trajs_.emplace_back(temp_traj);
-        traj_cost_vec_.emplace_back(cost_vec);
+        traj_cost_vec_.emplace_back(pose_cost_vec);
         if (!iter) {
             cout << "graphOptimize optimize failed! iter:" << iter << endl;
 //            ALOGD("graphOptimize optimize failed! iter: %d", iter);
@@ -450,40 +445,6 @@ void PathOptimizer::addVertices() {
 }
 
 void PathOptimizer::addEdgesSlip() {
-//    Eigen::Matrix<double, 1, 1> inform;
-//    inform.fill(cfg_->optimize.weight_slip);
-//    int pose_size = teb_->poses().size();
-//    computeSlopeAngles(q_, params_.g, cur_pose_[2], theta_slope_, psi_s_);
-//    auto edge_slip_start = new EdgeSlipStart();
-//    edge_slip_start->setVertex(0, teb_->poseVertex(0));
-//    edge_slip_start->setVertex(1, teb_->poseVertex(1));
-//    edge_slip_start->setVertex(2, teb_->timeDiffVertex(0));
-//    edge_slip_start->setInformation(inform);
-//    edge_slip_start->setSlopeInfo(theta_slope_, psi_s_, params_);
-//    edge_slip_start->setParams(cfg_);
-//    optimizer_->addEdge(edge_slip_start);
-//    std::cout << " debug add edge slip start finish " << std::endl;
-//    for (int i = 0; i < pose_size - 2; ++i) {
-//        auto edge_slip = new EdgeSlip();
-//        edge_slip->setVertex(0, teb_->poseVertex(i));
-//        edge_slip->setVertex(1, teb_->poseVertex(i + 1));
-//        edge_slip->setVertex(2, teb_->poseVertex(i + 2));
-//        edge_slip->setVertex(3, teb_->timeDiffVertex(i));
-//        edge_slip->setVertex(4, teb_->timeDiffVertex(i + 1));
-//        edge_slip->setInformation(inform);
-//        edge_slip->setSlopeInfo(theta_slope_, psi_s_, params_);
-//        edge_slip->setParams(cfg_);
-//        optimizer_->addEdge(edge_slip);
-//    }
-//
-//    auto edge_slip_goal = new EdgeSlipGoal();
-//    edge_slip_goal->setVertex(0, teb_->poseVertex(0));
-//    edge_slip_goal->setVertex(1, teb_->poseVertex(1));
-//    edge_slip_goal->setVertex(2, teb_->timeDiffVertex(0));
-//    edge_slip_goal->setInformation(inform);
-//    edge_slip_goal->setSlopeInfo(theta_slope_, psi_s_, params_);
-//    edge_slip_goal->setParams(cfg_);
-//    optimizer_->addEdge(edge_slip_goal);
     Eigen::Matrix<double, 1, 1> inform;
     inform.fill(cfg_->optimize.weight_slip);
     int pose_size = teb_->poses().size();
@@ -621,7 +582,6 @@ double PathOptimizer::computeCurrentCost() {
     optimizer_->computeInitialGuess();
 
     double max_cost = 0.0;
-    //    g2o::OptimizableGraph::Edge* max_cost_edge;
     for (const auto& edge : optimizer_->activeEdges()) {
         double cur_cost = edge->chi2();
 
@@ -629,8 +589,28 @@ double PathOptimizer::computeCurrentCost() {
 
         if (cur_cost > max_cost) {
             max_cost = cur_cost;
+            //            max_cost_edge = edge;
         }
+//        if (cur_cost > 1e-2) {
+            if (dynamic_cast<EdgeSlipWork *>(edge) != nullptr) {
+                cout << "EdgeSlipWork cost:";
+            } else if (dynamic_cast<EdgeVelocity *>(edge) != nullptr) {
+                cout << "EdgeVelocity cost:";
+            } else if (dynamic_cast<EdgeTimeOptimal *>(edge) != nullptr) {
+                cout << "EdgeTimeOptimal cost:";
+            } else if (dynamic_cast<EdgeKinematics *>(edge) != nullptr) {
+                cout << "EdgeKinematics cost:";
+            } else if (dynamic_cast<EdgeAcceleration *>(edge) != nullptr) {
+                cout << "EdgeAcceleration cost:";
+            } else if (dynamic_cast<EdgeAccelerationStart *>(edge) != nullptr) {
+                cout << "EdgeAccelerationStart cost:";
+            } else if (dynamic_cast<EdgeAccelerationGoal *>(edge) != nullptr) {
+                cout << "EdgeAccelerationGoal cost:";
+            }
+            cout << cur_cost << endl;
+//        }
     }
+    std::cout << "debug total path cost: " << cost << std::endl;
     return cost;
 }
 
@@ -645,6 +625,7 @@ void PathOptimizer::init(const ros::NodeHandle& nh) {
     params_.trackWidth = 0.48;
     params_.wheelbase = 0.45;
     teb_debug_pub_ = node_.advertise<visualization_msgs::MarkerArray>("/teb/debug_path", 1);
+    teb_cost_pub_ = node_.advertise<visualization_msgs::Marker>("/teb/path_cost", 1);
     teb_result_pub_ = node_.advertise<nav_msgs::Path>("/teb/result", 1);
     std::cout << "debug path optimizer init finish" << std::endl;
 }

@@ -224,6 +224,7 @@ namespace ninebot_algo {
             std::vector<std::vector<Eigen::Vector3d>> debug_trajs_;
             std::vector<std::vector<float>> traj_cost_vec_;
             ros::Publisher teb_debug_pub_;
+            ros::Publisher teb_cost_pub_;
             ros::Publisher teb_result_pub_;
         public:
             EIGEN_MAKE_ALIGNED_OPERATOR_NEW

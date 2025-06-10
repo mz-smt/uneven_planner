@@ -24,7 +24,7 @@ namespace uneven_planner
         traj_opt.setFrontend(kino_astar);
         traj_opt.setEnvironment(uneven_map);
         pso_smoother.init(nh);
-        simple_path = std::make_shared<SimplePath>();
+        simple_path = std::make_shared<SimplePath>(M_PI_4, 1.0f);
         simple_path->init(nh);
         stomp_smoother.init(nh);
         teb_ = std::make_shared<PathOptimizer>();
@@ -266,6 +266,10 @@ namespace uneven_planner
         Eigen::Vector3f end_pose(end_state.x(), end_state.y(), end_state.z());
         std::vector<Eigen::Vector3f> simple_path_result;
         simple_path->generatePath(cur_pose, end_pose, simple_path_result);
+//        simple_path_result.clear();
+//        for (auto point : init_path) {
+//            simple_path_result.emplace_back(point.x(), point.y(), point.z());
+//        }
         teb_->setQuaternion(quaternion);
         teb_->setReferenceTrajectory(simple_path_result);
         teb_->makePlan(cur_pose, {0, 0});
