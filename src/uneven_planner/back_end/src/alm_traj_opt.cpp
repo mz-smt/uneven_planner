@@ -400,7 +400,7 @@ namespace uneven_planner
         double pitch, roll;
         std::vector<float> cost_vec;
         cost_vec.resize(path.size(), 0.0f);
-        auto cost_weight = 100.0f;
+        auto cost_weight = 10.0f;
 #if VISUAL_TYPE == A_STAR_PATH
         for (size_t i = 0; i < path.size() - 1; i++) {
             auto cur_pose = path.at(i);
@@ -436,43 +436,51 @@ namespace uneven_planner
             auto delta_slope_heading = wrapToPi(psi_i - psi_s);
             float R = 0.0f;
             if (std::fabs(delta_theta) < 1e-6) {
-                R = 10.0f;
+                R = 100.0f;
             } else {
                 R = std::fabs(length / (2 * sin(delta_theta / 2.0f)));
             }
-            R = std::min(R, 10.0f);
+            R = std::min(R, 100.0f);
 #if OPTIMIZE_TYPE == TORQUE_DIFF
-            float weight_roll = 1.0f;
-            if (roll > 0) {
-                if (forward != turn_left) {
-                    weight_roll = 2.0f;
-                }
-            } else {
-                if (forward == turn_left) {
-                    weight_roll = 2.0f;
-                }
-            }
             const double mu = 0.8f;
             auto F_l = mu * N_l;
             auto F_r = mu * N_r;
             auto d = 0.1f;
             auto t_g_d = R * cos(delta_slope_heading) - d * sin(delta_slope_heading) * weight_turn;
             auto T_g = weight_dir * mass * g * sin(theta_slope) * t_g_d;
-            float wheel_torque = 0.0f;
+            float dist_r, dist_l;
             if (forward == turn_left) {
-                wheel_torque = F_r * (R + wheel_dist / 2.0f) + F_l * (R - wheel_dist / 2.0f);
+                dist_r = R + wheel_dist / 2.0f;
+                dist_l = R - wheel_dist / 2.0f;
             } else {
-                wheel_torque = F_l * (R + wheel_dist / 2.0f) + F_r * (R - wheel_dist / 2.0f);
+                dist_r = R - wheel_dist / 2.0f;
+                dist_l = R + wheel_dist / 2.0f;
             }
+            auto wheel_torque = F_r * dist_r + F_l * dist_l;
             auto t = std::fabs(wheel_torque) - T_g;
             if (t < 0) {
                 t = 0.1;
             }
-            auto weight_back = 1.0f;
-            if ((pitch > 3.0 / 180 * M_PI) && (!forward)) {
-                weight_back = 10.0f;
+            float cost_roll = 0.0f;
+            if (roll > 0) {
+                if (forward != turn_left || R > 10.0) {
+                    if (R > 10) {
+                        cost_roll = (F_r / F_l - 1.0) * 0.1;
+                    } else {
+                        cost_roll = (F_r / F_l - dist_r / dist_l) * 0.1;
+                    }
+                }
+            } else {
+                if (forward == turn_left || R > 10.0) {
+                    if (R > 10) {
+                        cost_roll = (F_l / F_r - 1) * 0.1;
+                    } else {
+                        cost_roll = (F_l / F_r - dist_l / dist_r) * 0.1;
+                    }
+                }
             }
-            auto cost = 1.0 / t * weight_back * weight_roll;
+            auto cost_t = 1.0 / t;
+            auto cost = cost_t + cost_roll;
             cost_vec.at(i) = cost;
             std::cout << "debug path current pose: " << cur_pose[0] << " " << cur_pose[1] << " " << cur_pose[2] / M_PI * 180
                       << " next pose: " << next_pose[0] << " " << next_pose[1] << " " << next_pose[2] / M_PI * 180 << " "
@@ -480,7 +488,7 @@ namespace uneven_planner
                       << " and N-forces: " << N_l << "," << N_r << " force: " << F_l << "," << F_r << " dist: "
                       << (R + wheel_dist / 2.0f) << "," << (R - wheel_dist / 2.0f) << " wheel torque: " << wheel_torque
                       << " torque: " << T_g << " direction: " << forward << " " << turn_left << " R:" << R
-                      << " weight roll: " << weight_roll << " weight back:" << weight_back << " cost: " << cost << std::endl;
+                      << " cost roll: " << cost_roll << " cost t: " << cost_t << " cost: " << cost << std::endl;
 #elif OPTIMIZE_TYPE == MU_COST
             cost_weight = 3.0f;
             auto weight_s = 0.05f;

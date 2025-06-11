@@ -96,7 +96,7 @@ namespace ninebot_algo {
                 optimize.weight_kinematics_nh = 1000;
                 optimize.weight_kinematics_diff_drive = 1;
 
-                optimize.weight_optimal_time = 0.5;
+                optimize.weight_optimal_time = 0.1;
                 optimize.weight_shortest_path = 0;
                 optimize.weight_obstacle = 100;
                 optimize.weight_slip = 10;
