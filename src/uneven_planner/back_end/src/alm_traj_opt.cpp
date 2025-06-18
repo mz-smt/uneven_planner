@@ -400,7 +400,7 @@ namespace uneven_planner
         double pitch, roll;
         std::vector<float> cost_vec;
         cost_vec.resize(path.size(), 0.0f);
-        auto cost_weight = 10.0f;
+        auto cost_weight = 100.0f;
 #if VISUAL_TYPE == A_STAR_PATH
         for (size_t i = 0; i < path.size() - 1; i++) {
             auto cur_pose = path.at(i);
@@ -531,6 +531,31 @@ namespace uneven_planner
                 << forward << " " << turn_left << " F_total: " << F_total << " T total:" << T_total << " t_g_d: "
                 << t_g_d << " t_g:" << T_g << " force: " << F_l << " " << F_r << " mu: " << mu_l << " " << mu_r
                 << " cost: " << cost << std::endl;
+#elif OPTIMIZE_TYPE == WORK_MODE
+            const double mu = 0.8f;
+            auto F_l = mu * N_l;
+            auto F_r = mu * N_r;
+            float d_r, d_l;
+            if (forward) {
+                d_r = length + wheel_dist / 2 * delta_theta;
+                d_l = length - wheel_dist / 2 * delta_theta;
+            } else {
+                d_r = length - wheel_dist / 2 * delta_theta;
+                d_l = length + wheel_dist / 2 * delta_theta;
+            }
+            auto w_drive = F_l * std::fabs(d_l) + F_r * std::fabs(d_r);
+            auto dx = next_pose[0] - cur_pose[0];
+            auto dy = next_pose[1] - cur_pose[1];
+            auto d_xy = dx * cos(psi_s) + dy * sin(psi_s);
+            auto f_slope = mass * g * sin(theta_slope);
+            auto dist_slope = d_xy / cos(theta_slope);
+            auto w_grav = f_slope * dist_slope;
+            auto delta_w = w_drive - w_grav;
+            if (delta_w < 0) {
+                delta_w = 1e-6;
+            }
+            auto cost = 1 / delta_w * (std::fabs(d_r) + std::fabs(d_l)) / 2;
+            cost_vec.at(i) = cost;
 #endif
         }
 

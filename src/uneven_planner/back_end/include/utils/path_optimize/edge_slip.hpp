@@ -54,42 +54,45 @@ namespace ninebot_algo::motion_planner {
                 R = std::fabs(length / (2 * sin(delta_theta / 2.0f)));
             }
             R = std::min(R, 100.0f);
-            double mu = 0.8f;
+            const double mu = 0.8f;
             auto F_l = mu * N_l;
             auto F_r = mu * N_r;
-            auto d = 0.1;
-            auto t_g_d = R * cos(delta_slope_heading) - d * sin(delta_slope_heading) * weight_turn;
-            auto T_g = weight_dir * param_.mass * param_.g * sin(theta_slope_) * t_g_d;
-            float dist_r, dist_l;
-            if (forward == turn_left) {
-                dist_r = R + param_.wheelbase / 2.0f;
-                dist_l = R - param_.wheelbase / 2.0f;
+            float d_r, d_l;
+            if (forward) {
+                d_r = length + param_.wheelbase / 2 * delta_theta;
+                d_l = length - param_.wheelbase / 2 * delta_theta;
             } else {
-                dist_r = R - param_.wheelbase / 2.0f;
-                dist_l = R + param_.wheelbase / 2.0f;
+                d_r = length - param_.wheelbase / 2 * delta_theta;
+                d_l = length + param_.wheelbase / 2 * delta_theta;
             }
-            auto wheel_torque = F_r * dist_r + F_l * dist_l;
-            auto t = std::fabs(wheel_torque) - T_g;
-            if (t < 0) {
-                t = 0.1;
+            auto w_drive = F_l * std::fabs(d_l) + F_r * std::fabs(d_r);
+            auto dx = next_pose[0] - cur_pose[0];
+            auto dy = next_pose[1] - cur_pose[1];
+            auto d_xy = dx * cos(psi_s_) + dy * sin(psi_s_);
+            auto f_slope = param_.mass * param_.g * sin(theta_slope_);
+            auto dist_slope = d_xy / cos(theta_slope_);
+            auto w_grav = f_slope * dist_slope;
+            auto delta_w = w_drive - w_grav;
+            if (delta_w < 0) {
+                delta_w = 1e-6;
             }
+            auto cost_t = 1 / delta_w * (std::fabs(d_r) + std::fabs(d_l)) / 2;
             float cost_roll = 0.0f;
             if (roll > 0) {
-                if (forward != turn_left || R > 3.0) {
-                    cost_roll = std::fabs(F_r / F_l - dist_r / dist_l) * 0.5;
+                if (forward != turn_left) {
+                    cost_roll = std::fabs(F_r / F_l - d_r / d_l) * 0.5;
                 }
             } else {
-                if (forward == turn_left || R > 3.0) {
-                    cost_roll = std::fabs(F_l / F_r - dist_l / dist_r) * 0.5;
+                if (forward == turn_left) {
+                    cost_roll = std::fabs(F_l / F_r - d_l / d_r) * 0.5;
                 }
             }
-            auto cost_t = 1.0 / t;
-            auto cost = cost_t + cost_roll;
+            auto cost = cost_t * 10 + cost_roll;
             std::cout << "debug path current pose: " << cur_pose[0] << " " << cur_pose[1] << " " << cur_pose[2] / M_PI * 180
                       << " next pose: " << next_pose[0] << " " << next_pose[1] << " " << next_pose[2] / M_PI * 180 << " "
                       << psi_i / M_PI * 180 << " pitch: " << pitch / M_PI * 180 << " roll: " << roll / M_PI * 180
                       << " and N-forces: " << N_l << "," << N_r << " force: " << F_l << "," << F_r << " dist: "
-                      << dist_l << "," << dist_r << " wheel torque: " << wheel_torque << " torque: " << T_g
+                      << d_l << "," << d_r
                       << " direction: " << forward << " " << turn_left << " R:" << R << " cost roll: " << cost_roll
                       << " cost t: " << cost_t << " cost: " << cost << std::endl;
             _error[0] = cost;

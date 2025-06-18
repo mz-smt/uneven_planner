@@ -70,7 +70,7 @@ namespace ninebot_algo {
                 robot.max_rot_vel = 0.5f;
 
                 robot.max_lin_acc = 0.5;  // 0.04 * 20
-                robot.max_rot_acc = 0.5;  // 0.1 * 20
+                robot.max_rot_acc = 1.0;  // 0.1 * 20
 
                 /* Obstacle */
                 obstacles.min_obs_dist = 0.8f;
@@ -82,23 +82,23 @@ namespace ninebot_algo {
                 /* Optimize */
                 optimize.time_step = 0.3f;
 
-                optimize.num_inner_iterations = 10;
-                optimize.num_outer_iterations = 100;
+                optimize.num_inner_iterations = 5;
+                optimize.num_outer_iterations = 2;
 
                 optimize.weight_max_lin_vel_forward = 2;
                 optimize.weight_max_rot_vel = 1;
 
                 optimize.weight_max_lin_acc = 10;
-                optimize.weight_max_rot_acc = 10;
+                optimize.weight_max_rot_acc = 5;
                 //                optimize.weight_max_lin_acc = 1000;
                 //                optimize.weight_max_rot_acc = 1000;
 
-                optimize.weight_kinematics_nh = 1000;
-                optimize.weight_kinematics_diff_drive = 1;
+                optimize.weight_kinematics_nh = 2000;
+                optimize.weight_kinematics_diff_drive = 2;
 
                 optimize.weight_optimal_time = 0.1;
                 optimize.weight_shortest_path = 0;
-                optimize.weight_obstacle = 100;
+                optimize.weight_obstacle = 10;
                 optimize.weight_slip = 10;
             }
         };
