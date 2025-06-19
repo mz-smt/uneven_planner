@@ -544,18 +544,20 @@ namespace uneven_planner
                 d_l = length + wheel_dist / 2 * delta_theta;
             }
             auto w_drive = F_l * std::fabs(d_l) + F_r * std::fabs(d_r);
-            auto dx = next_pose[0] - cur_pose[0];
-            auto dy = next_pose[1] - cur_pose[1];
-            auto d_xy = dx * cos(psi_s) + dy * sin(psi_s);
-            auto f_slope = mass * g * sin(theta_slope);
-            auto dist_slope = d_xy / cos(theta_slope);
-            auto w_grav = f_slope * dist_slope;
+            auto a = tan(theta_slope) * cos(psi_s);
+            auto b = tan(theta_slope) * sin(psi_s);
+            auto delta_z = a * (next_pose.x() - cur_pose.x()) + b * (next_pose.y() - cur_pose.y())
+                           + 0.09 * (a * (cos(next_pose.z()) - cos(cur_pose.z())) + b * (sin(next_pose.z()) - sin(cur_pose.z())));
+            auto w_grav = mass * g * delta_z;
             auto delta_w = w_drive - w_grav;
-            if (delta_w < 0) {
-                delta_w = 1e-6;
-            }
             auto cost = 1 / delta_w * (std::fabs(d_r) + std::fabs(d_l)) / 2;
             cost_vec.at(i) = cost;
+            std::cout << "debug path current pose: " << cur_pose[0] << " " << cur_pose[1] << " " << cur_pose[2] / M_PI * 180
+                      << " next pose: " << next_pose[0] << " " << next_pose[1] << " " << next_pose[2] / M_PI * 180
+                      << " pitch: " << pitch / M_PI * 180 << " roll: " << roll / M_PI * 180 << " and forces: " << N_l
+                      << "," << N_r << " force: " << F_l << " " << F_r << " dist: " << d_l << " " << d_r
+                      << " forward: " << forward << " work drive: " << w_drive << " delta z: " << delta_z
+                      << " work grav: " << w_grav << " cost: " << cost << std::endl;
 #endif
         }
 
