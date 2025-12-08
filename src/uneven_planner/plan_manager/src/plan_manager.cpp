@@ -265,6 +265,7 @@ namespace uneven_planner
         Eigen::Vector3f cur_pose(odom_pos.x(), odom_pos.y(), odom_pos.z());
         Eigen::Vector3f end_pose(end_state.x(), end_state.y(), end_state.z());
         std::vector<Eigen::Vector3f> simple_path_result;
+        simple_path->setForbiddenDir(true, 0.0f);
         simple_path->generatePath(cur_pose, end_pose, simple_path_result);
 //        simple_path_result.clear();
 //        for (auto point : init_path) {

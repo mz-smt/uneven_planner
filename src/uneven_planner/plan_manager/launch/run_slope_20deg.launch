@@ -7,7 +7,7 @@
   <arg name="x_pos" value="-2.3"/>
   <arg name="y_pos" value="0.0"/>
   <arg name="z_pos" value="1.0"/>
-  <arg name="Y_pos" value="0.0"/>
+  <arg name="Y_pos" value="3.14"/>
 
   <rosparam command="load" file="$(find plan_manager)/params/run_slope_20deg.yaml" />
 

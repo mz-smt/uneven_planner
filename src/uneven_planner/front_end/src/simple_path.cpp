@@ -77,10 +77,28 @@ bool SimplePath::generatePath(const Eigen::Vector3f& start_pt, const Eigen::Vect
     // Target is end_pt
 
     /* 3.Interpolate */
+    bool need_reverse = false;
+    if (set_forbid_dir_) {
+        need_reverse = crossesForbidden(start_agl, first_turn_pt[2], forbidden_dir_);
+
+    }
     int rotate_cnt = static_cast<int>(trunc(wrapToPi(first_turn_pt[2] - start_agl) / ROTATE_STEP));
     //    cout << "rotate_cnt:" << wrapToPi(first_turn_pt[2] - start_agl) << " cnt:" << rotate_cnt << endl;
     float rotate_step = rotate_cnt > 0 ? ROTATE_STEP : -ROTATE_STEP;
     rotate_cnt = abs(rotate_cnt);
+    if (need_reverse) {
+        auto angle_diff = wrapToPi(first_turn_pt[2] - start_agl);
+        auto reverse_angle = angle_diff;
+        if (angle_diff > 0) {
+            reverse_angle = angle_diff - 2 * M_PI;
+        } else {
+            reverse_angle = angle_diff + 2 * M_PI;
+        }
+        rotate_cnt = static_cast<int>(trunc(reverse_angle / ROTATE_STEP));
+        rotate_step = rotate_cnt > 0 ? ROTATE_STEP : -ROTATE_STEP;
+        rotate_cnt = abs(rotate_cnt);
+
+    }
     optimal_path.emplace_back(start_pt[0], start_pt[1], wrapToPi(start_agl));
     for (int i = 1; i <= rotate_cnt; ++i) {
         optimal_path.emplace_back(start_pt[0], start_pt[1], wrapToPi(start_agl + rotate_step * i));
@@ -96,12 +114,30 @@ bool SimplePath::generatePath(const Eigen::Vector3f& start_pt, const Eigen::Vect
 
     if (!theta_free) {
         optimal_path.emplace_back(move_pt[0], move_pt[1], wrapToPi(move_pt[2]));
-        rotate_cnt = static_cast<int>(wrapToPi(end_pt[2] - move_pt[2]) / ROTATE_STEP);
-//        cout << "move_pt:(" << move_pt[0] << ", " << move_pt[1] << ", " << move_pt[2] << ") "
-//             << "end_pt:(" << end_pt[0] << ", " << end_pt[1] << ", " << end_pt[2] << ") "
-//             << "rotate_cnt:" << wrapToPi(end_pt[2] - move_pt[2]) << " cnt:" << rotate_cnt << endl;
+        need_reverse = false;
+        if (set_forbid_dir_) {
+            need_reverse = crossesForbidden(move_pt[2], end_pt[2], forbidden_dir_);
+
+        }
+        rotate_cnt = static_cast<int>(trunc(wrapToPi(end_pt[2] - move_pt[2]) / ROTATE_STEP));
+        //    cout << "move_pt:(" << move_pt[0] << ", " << move_pt[1] << ", " << move_pt[2] << ") "
+        //         << "end_pt:(" << end_pt[0] << ", " << end_pt[1] << ", " << end_pt[2] << ") "
+        //         << "rotate_cnt:" << wrapToPi(end_pt[2] - move_pt[2]) << " cnt:" << rotate_cnt << endl;
         rotate_step = rotate_cnt > 0 ? ROTATE_STEP : -ROTATE_STEP;
         rotate_cnt = abs(rotate_cnt);
+        if (need_reverse) {
+            auto angle_diff = wrapToPi(end_pt[2] - move_pt[2]);
+            auto reverse_angle = angle_diff;
+            if (angle_diff > 0) {
+                reverse_angle = angle_diff - 2 * M_PI;
+            } else {
+                reverse_angle = angle_diff + 2 * M_PI;
+            }
+            rotate_cnt = static_cast<int>(trunc(reverse_angle / ROTATE_STEP));
+            rotate_step = rotate_cnt > 0 ? ROTATE_STEP : -ROTATE_STEP;
+            rotate_cnt = abs(rotate_cnt);
+
+        }
         for (int k = 1; k <= rotate_cnt; ++k) {
             optimal_path.emplace_back(move_pt[0], move_pt[1],
                                       wrapToPi(move_pt[2] + rotate_step * k));
@@ -110,6 +146,9 @@ bool SimplePath::generatePath(const Eigen::Vector3f& start_pt, const Eigen::Vect
     } else {
         optimal_path.emplace_back(move_pt[0], move_pt[1], wrapToPi(move_pt[2]));
     }
+    optimal_path.emplace_back(bodyFrameToGroundFrame(Eigen::Vector3f(0.5, 0.0, 0.0), optimal_path.back()));
+//    Eigen::Vector3f  forward_pt{0.2, 0, 0.0};
+//    optimal_path.emplace_back(bodyFrameToGroundFrame(forward_pt, optimal_path.back()));
     nav_msgs::Path simple_path;
     simple_path.header.stamp = ros::Time::now();
     simple_path.header.frame_id = "world";

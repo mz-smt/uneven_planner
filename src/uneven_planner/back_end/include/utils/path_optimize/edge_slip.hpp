@@ -47,54 +47,73 @@ namespace ninebot_algo::motion_planner {
             auto turn_left = delta_theta > 0;
             auto weight_turn = turn_left ? 1.0f : -1.0f;
             auto delta_slope_heading = wrapToPi(psi_i - psi_s_);
-            float R = 0.0f;
-            if (std::fabs(delta_theta) < 1e-6) {
-                R = 100.0f;
-            } else {
-                R = std::fabs(length / (2 * sin(delta_theta / 2.0f)));
-            }
-            R = std::min(R, 100.0f);
             const double mu = 0.8f;
             auto F_l = mu * N_l;
             auto F_r = mu * N_r;
-            float d_r, d_l;
-            if (forward) {
-                d_r = length + param_.wheelbase / 2 * delta_theta;
-                d_l = length - param_.wheelbase / 2 * delta_theta;
+            float dist_r, dist_l;
+            float radius_r, radius_l;
+            float R = 0.0f;
+            if (std::fabs(delta_theta) < 1e-6) {
+                dist_r = length;
+                dist_l = length;
+                R = 100;
+                radius_l = R;
+                radius_r = R;
             } else {
-                d_r = length - param_.wheelbase / 2 * delta_theta;
-                d_l = length + param_.wheelbase / 2 * delta_theta;
+                R = std::fabs(length / (2 * sin(delta_theta / 2.0f)));
+                if (forward == turn_left) {
+                    radius_r = (R + param_.wheelbase / 2);
+                    radius_l = (R - param_.wheelbase / 2);
+                } else {
+                    radius_r = (R - param_.wheelbase / 2);
+                    radius_l = (R + param_.wheelbase / 2);
+                }
+                dist_r = radius_r * std::fabs(delta_theta);
+                dist_l = radius_l * std::fabs(delta_theta);
             }
-            auto w_drive = F_l * std::fabs(d_l) + F_r * std::fabs(d_r);
-            auto dx = next_pose[0] - cur_pose[0];
-            auto dy = next_pose[1] - cur_pose[1];
-            auto d_xy = dx * cos(psi_s_) + dy * sin(psi_s_);
-            auto f_slope = param_.mass * param_.g * sin(theta_slope_);
-            auto dist_slope = d_xy / cos(theta_slope_);
-            auto w_grav = f_slope * dist_slope;
+            auto d = 0.1;
+            auto t_g_d = R * cos(delta_slope_heading) - d * sin(delta_slope_heading) * weight_turn;
+            auto T_g = weight_dir * param_.mass * param_.g * sin(theta_slope_) * t_g_d;
+            auto wheel_torque = F_r * radius_r + F_l * radius_l;
+            auto torque = std::fabs(wheel_torque) - T_g;
+            if (torque < 0) {
+                torque = 0.1;
+            }
+            auto cost_torque = 1.0 / torque;
+            auto w_drive = F_l * std::fabs(dist_l) + F_r * std::fabs(dist_r);
+            auto a = tan(theta_slope_) * cos(psi_s_);
+            auto b = tan(theta_slope_) * sin(psi_s_);
+            auto delta_z = a * (next_pose.x() - cur_pose.x()) + b * (next_pose.y() - cur_pose.y())
+                           + 0.0 * (a * (cos(next_pose.z()) - cos(cur_pose.z())) + b * (sin(next_pose.z()) - sin(cur_pose.z())));
+            auto w_grav = param_.mass * param_.g * delta_z;
             auto delta_w = w_drive - w_grav;
             if (delta_w < 0) {
                 delta_w = 1e-6;
             }
-            auto cost_t = 1 / delta_w * (std::fabs(d_r) + std::fabs(d_l)) / 2;
+            auto cost_work = 1 / delta_w * (std::fabs(dist_r) + std::fabs(dist_l)) / 2;
+            if (pitch > 0 && delta_z > 0 && !forward) {
+                auto penalty_work_cost = cost_work * cos(delta_slope_heading + M_PI) * 50;
+                cost_work += penalty_work_cost;
+            }
             float cost_roll = 0.0f;
             if (roll > 0) {
                 if (forward != turn_left) {
-                    cost_roll = std::fabs(F_r / F_l - d_r / d_l) * 0.5;
+                    cost_roll = std::fabs(F_r / F_l - dist_r / dist_l);
                 }
             } else {
                 if (forward == turn_left) {
-                    cost_roll = std::fabs(F_l / F_r - d_l / d_r) * 0.5;
+                    cost_roll = std::fabs(F_l / F_r - dist_l / dist_r);
                 }
             }
-            auto cost = cost_t * 10 + cost_roll;
+            cost_roll *= std::fabs(sin(delta_slope_heading));
+            auto cost = cost_work * 5.0 + cost_roll * 0.5 + cost_torque * 5.0;
             std::cout << "debug path current pose: " << cur_pose[0] << " " << cur_pose[1] << " " << cur_pose[2] / M_PI * 180
                       << " next pose: " << next_pose[0] << " " << next_pose[1] << " " << next_pose[2] / M_PI * 180 << " "
                       << psi_i / M_PI * 180 << " pitch: " << pitch / M_PI * 180 << " roll: " << roll / M_PI * 180
                       << " and N-forces: " << N_l << "," << N_r << " force: " << F_l << "," << F_r << " dist: "
-                      << d_l << "," << d_r
+                      << dist_l << "," << dist_r << " work: " << w_drive << " , " << w_grav
                       << " direction: " << forward << " " << turn_left << " R:" << R << " cost roll: " << cost_roll
-                      << " cost t: " << cost_t << " cost: " << cost << std::endl;
+                      << " cost work: " << cost_work << " cost torque:" << cost_torque << " cost: " << cost << std::endl;
             _error[0] = cost;
         }
 
@@ -246,27 +265,24 @@ namespace ninebot_algo::motion_planner {
         }
 
         static void computeForcesImproved(double pitch, double roll, double& N_L, double& N_R, const VehicleParams& params) {
-            // 重力分解（车辆姿态）：
-            double g_x = params.g * sin(pitch);  // 纵向分量
-            double g_y = params.g * sin(roll);  // 横向分量
-            double g_z = params.g * cos(pitch) * cos(roll);  // 垂直分量
+            // 1. 重力分量计算（车辆坐标系）
+            double g_x = params.g * sin(pitch);                     // 纵向分量
+            double g_y = params.g * sin(roll) * cos(pitch);         // 横向分量
+            double g_z = params.g * cos(pitch) * cos(roll);         // 垂直分量
 
-            // 静态后轴法向力（后轮）：
+            // 2. 静态后轴载荷（考虑坡度）
             double N0 = (params.mass * g_z * params.rearWeightFraction) / 2.0;
 
-            // 载荷转移：
-            // 纵向载荷转移（由俯仰角引起）
-            double deltaN_long =
-                    - (params.mass * params.g * sin(pitch) * cos(roll) * params.cgHeight) / params.trackWidth / 2.0f;
-            // 横向载荷转移（由横滚角引起）
-            double deltaN_roll =
-                    (params.mass * params.g * sin(roll) * cos(pitch) * params.cgHeight) / params.wheelbase;
-            // 侧向加速度引起的载荷转移
-            double deltaN_total = deltaN_roll;
+            // 3. 载荷转移计算
+            // 纵向载荷转移（使用轴距，上坡时后轴载荷增加）
+            double deltaN_long = -(params.mass * g_x * params.cgHeight) / params.wheelbase / 2.0;  // ✅
 
-            // 最终左右轮法向力
-            N_L = N0 + deltaN_long - deltaN_total;
-            N_R = N0 + deltaN_long + deltaN_total;
+            // 横向载荷转移（使用轮距）
+            double deltaN_roll = (params.mass * g_y * params.cgHeight) / params.trackWidth;       // ✅
+
+            // 4. 左右轮最终载荷
+            N_L = N0 + deltaN_long - deltaN_roll;  // 左侧轮
+            N_R = N0 + deltaN_long + deltaN_roll;  // 右侧轮
         }
 
         float theta_slope_;

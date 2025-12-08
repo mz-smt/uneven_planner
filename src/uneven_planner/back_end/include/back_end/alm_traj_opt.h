@@ -15,7 +15,7 @@
 #define A_STAR_PATH 0
 #define SAMPLE_PATH 1
 
-#define OPTIMIZE_TYPE WORK_MODE
+#define OPTIMIZE_TYPE TORQUE_DIFF
 #define TORQUE_DIFF 0
 #define MU_COST 1
 #define WORK_MODE 2
